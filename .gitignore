@@ -1,0 +1,14 @@
+# 이 파일은 Flutter/Android 빌드 산출물과 로컬 설정 파일이 저장소에 섞이지 않도록 제외합니다.
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+android/.gradle/
+android/local.properties
+android/app/debug
+android/app/profile
+android/app/release
+*.iml
+__pycache__/
+*.pyc

@@ -1,0 +1,4 @@
+<!-- 이 파일은 Flutter 첫 프레임 전 Android 시작 화면 배경을 정의합니다. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/white" />
+</layer-list>
