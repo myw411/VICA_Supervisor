@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/vica_ui.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,57 +34,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return VicaPage(
+      title: '설정',
       children: [
-        _Field(controller: _c('rosBridgeUrl'), label: 'ROS Bridge WebSocket 주소'),
-        _Field(controller: _c('mapHttpBaseUrl'), label: '지도 HTTP 서버 주소'),
-        _Field(controller: _c('locationStorageRoot'), label: '좌표 저장 루트'),
-        const SizedBox(height: 12),
-        Text('Topic 이름', style: Theme.of(context).textTheme.titleMedium),
-        _Field(controller: _c('mapListRequestTopic'), label: '지도 목록 요청 topic'),
-        _Field(controller: _c('mapListTopic'), label: '지도 목록 topic'),
-        _Field(controller: _c('locationListRequestTopic'), label: '장소 목록 요청 topic'),
-        _Field(controller: _c('locationListTopic'), label: '장소 목록 topic'),
-        _Field(controller: _c('saveLocationTopic'), label: '장소 저장 topic'),
-        _Field(controller: _c('deleteLocationRequestTopic'), label: '장소 삭제 요청 topic'),
-        _Field(controller: _c('robotStatusTopic'), label: '로봇 상태 topic'),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          title: const Text('지도 목록 자동 요청'),
-          value: _settings.autoRequestMapList,
-          onChanged: (value) => setState(
-            () => _settings = _settings.copyWith(autoRequestMapList: value),
-          ),
-        ),
-        SwitchListTile(
-          title: const Text('장소 목록 자동 요청'),
-          value: _settings.autoRequestLocationList,
-          onChanged: (value) => setState(
-            () => _settings = _settings.copyWith(autoRequestLocationList: value),
-          ),
-        ),
-        ExpansionTile(
-          title: const Text('고급 설정'),
-          children: [
-            _Field(controller: _c('xOffset'), label: 'x 보정값', number: true),
-            _Field(controller: _c('yOffset'), label: 'y 보정값', number: true),
-            _Field(controller: _c('yawOffset'), label: 'yaw 보정값', number: true),
-            _Field(controller: _c('mapScale'), label: '지도 스케일 보정값', number: true),
-            SwitchListTile(
-              title: const Text('지도 Y축 반전'),
-              value: _settings.flipMapY,
-              onChanged: (value) => setState(
-                () => _settings = _settings.copyWith(flipMapY: value),
+        VicaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('계정 정보', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              TextField(
+                readOnly: true,
+                controller: TextEditingController(text: 'admin'),
+                decoration: const InputDecoration(labelText: '관리자 정보'),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
+        VicaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('네트워크 및 ROS', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _Field(controller: _c('mapHttpBaseUrl'), label: '지도 이미지 URL'),
+              _Field(controller: _c('rosBridgeUrl'), label: 'ROS Bridge 주소'),
+              _Field(controller: _c('locationStorageRoot'), label: '좌표 저장 루트'),
+            ],
+          ),
+        ),
+        VicaCard(
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Text('고급 설정', style: Theme.of(context).textTheme.titleMedium),
+            children: [
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('지도 목록 자동 요청'),
+                value: _settings.autoRequestMapList,
+                onChanged: (value) => setState(
+                  () => _settings = _settings.copyWith(autoRequestMapList: value),
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('장소 목록 자동 요청'),
+                value: _settings.autoRequestLocationList,
+                onChanged: (value) => setState(
+                  () => _settings =
+                      _settings.copyWith(autoRequestLocationList: value),
+                ),
+              ),
+              _Field(controller: _c('mapListRequestTopic'), label: '지도 목록 요청 topic'),
+              _Field(controller: _c('mapListTopic'), label: '지도 목록 topic'),
+              _Field(controller: _c('locationListRequestTopic'), label: '장소 목록 요청 topic'),
+              _Field(controller: _c('locationListTopic'), label: '장소 목록 topic'),
+              _Field(controller: _c('saveLocationTopic'), label: '장소 저장 topic'),
+              _Field(controller: _c('deleteLocationRequestTopic'), label: '장소 삭제 요청 topic'),
+              _Field(controller: _c('robotStatusTopic'), label: '로봇 상태 topic'),
+              _Field(controller: _c('xOffset'), label: 'x 보정값', number: true),
+              _Field(controller: _c('yOffset'), label: 'y 보정값', number: true),
+              _Field(controller: _c('yawOffset'), label: 'yaw 보정값', number: true),
+              _Field(controller: _c('mapScale'), label: '지도 스케일 보정값', number: true),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('지도 Y축 반전'),
+                value: _settings.flipMapY,
+                onChanged: (value) => setState(
+                  () => _settings = _settings.copyWith(flipMapY: value),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: _save,
           icon: const Icon(Icons.save),
-          label: const Text('설정 저장'),
+          label: const Text('저장'),
         ),
       ],
     );

@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/robot_status.dart';
 import '../providers/supervisor_provider.dart';
-import '../widgets/status_badge.dart';
+import '../widgets/vica_ui.dart';
 
 class RobotManagementScreen extends StatefulWidget {
   const RobotManagementScreen({super.key});
@@ -19,41 +19,36 @@ class _RobotManagementScreenState extends State<RobotManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final robots = context.watch<SupervisorProvider>().robots;
+    final visibleRobots = robots.isEmpty ? [_waitingRobot()] : robots;
     final selected = _selectedRobotId == null
-        ? (robots.isEmpty ? null : robots.first)
-        : _findRobot(robots, _selectedRobotId!);
-    return Row(
+        ? visibleRobots.first
+        : _findRobot(visibleRobots, _selectedRobotId!) ?? visibleRobots.first;
+
+    return VicaPage(
+      title: '로봇 관리',
+      subtitle: 'ROS2 /robot_status 메시지를 수신하면 실제 로봇 상태로 교체됩니다.',
       children: [
-        SizedBox(
-          width: 320,
-          child: robots.isEmpty
-              ? const Center(child: Text('로봇 상태 수신 대기 중'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: robots.length,
-                  itemBuilder: (context, index) {
-                    final robot = robots[index];
-                    return Card(
-                      child: ListTile(
-                        selected: selected?.robotId == robot.robotId,
-                        title: Text(robot.robotName),
-                        subtitle: Text('${robot.status} / 배터리 ${robot.battery}%'),
-                        trailing: robot.hasError
-                            ? const Icon(Icons.warning, color: Colors.red)
-                            : const Icon(Icons.check_circle, color: Colors.green),
-                        onTap: () => setState(
-                          () => _selectedRobotId = robot.robotId,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+        ...visibleRobots.map(
+          (robot) => VicaRobotCard(
+            robot: robot,
+            selected: selected.robotId == robot.robotId,
+            onTap: () => setState(() => _selectedRobotId = robot.robotId),
+          ),
         ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: selected == null
-              ? const Center(child: Text('로봇을 선택하세요.'))
-              : _RobotDetail(robot: selected),
+        VicaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('상세 정보', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 14),
+              _Info(label: '상태', value: selected.status),
+              _Info(label: '현재 위치', value: selected.currentLocation),
+              _Info(label: '목적지', value: selected.currentGoal),
+              _Info(label: '오류 사유', value: selected.errorReason),
+              _Info(label: '대기 사유', value: selected.waitingReason),
+              _Info(label: '마지막 통신', value: selected.timestamp.toLocal().toString()),
+            ],
+          ),
         ),
       ],
     );
@@ -67,36 +62,22 @@ class _RobotManagementScreenState extends State<RobotManagementScreen> {
     }
     return null;
   }
-}
 
-class _RobotDetail extends StatelessWidget {
-  const _RobotDetail({required this.robot});
-
-  final RobotStatus robot;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Row(
-          children: [
-            Text(robot.robotName, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(width: 12),
-            StatusBadge(
-              label: robot.status,
-              color: robot.hasError ? Colors.red : Colors.green,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _Info(label: '현재 위치', value: robot.currentLocation),
-        _Info(label: '좌표', value: 'x ${robot.x}, y ${robot.y}, yaw ${robot.yaw}'),
-        _Info(label: '목적지', value: robot.currentGoal),
-        _Info(label: '오류 사유', value: robot.errorReason),
-        _Info(label: '대기 사유', value: robot.waitingReason),
-        _Info(label: '마지막 통신', value: robot.timestamp.toLocal().toString()),
-      ],
+  RobotStatus _waitingRobot() {
+    return RobotStatus(
+      robotId: 'robot_status_waiting',
+      robotName: '로봇 상태 수신 대기',
+      status: 'waiting',
+      x: 0,
+      y: 0,
+      yaw: 0,
+      currentLocation: '수신 대기',
+      currentGoal: '없음',
+      battery: 0,
+      errorReason: '',
+      waitingReason: '로봇 상태 메시지 수신 대기',
+      mapId: '',
+      timestamp: DateTime.now().subtract(const Duration(minutes: 6)),
     );
   }
 }
@@ -110,13 +91,13 @@ class _Info extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 110,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            width: 92,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
           Expanded(child: Text(value.isEmpty ? '-' : value)),
         ],

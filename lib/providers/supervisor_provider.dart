@@ -100,6 +100,9 @@ class SupervisorProvider extends ChangeNotifier {
       await _client?.connect(settings.rosBridgeUrl);
       if (_connectionState == RosConnectionState.connected) {
         _subscribeRequiredTopics(settings);
+        if (settings.autoRequestMapList) {
+          requestMapList(settings);
+        }
       }
     });
   }

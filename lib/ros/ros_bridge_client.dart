@@ -31,6 +31,7 @@ class RosBridgeClient {
     _setState(RosConnectionState.connecting, 'ROS 연결 시도: $url');
     try {
       _channel = WebSocketChannel.connect(Uri.parse(url));
+      await _channel!.ready;
       _subscription = _channel!.stream.listen(
         _handleRawMessage,
         onDone: () => _setState(RosConnectionState.disconnected, 'ROS 연결 종료'),
@@ -99,22 +100,26 @@ class RosBridgeClient {
   }
 
   void _handleRawMessage(dynamic raw) {
-    final decoded = jsonDecode(raw as String) as Map<String, Object?>;
-    final topic = decoded['topic'] as String?;
-    final msg = decoded['msg'];
-    final handler = topic == null ? null : _handlers[topic];
-    if (handler == null || msg is! Map<String, Object?>) {
-      return;
-    }
+    try {
+      final decoded = jsonDecode(raw as String) as Map<String, Object?>;
+      final topic = decoded['topic'] as String?;
+      final msg = decoded['msg'];
+      final handler = topic == null ? null : _handlers[topic];
+      if (handler == null || msg is! Map<String, Object?>) {
+        return;
+      }
 
-    final data = msg['data'];
-    if (data is! String) {
-      handler(msg);
-      return;
-    }
+      final data = msg['data'];
+      if (data is! String) {
+        handler(msg);
+        return;
+      }
 
-    final payload = jsonDecode(data) as Map<String, Object?>;
-    handler(payload);
+      final payload = jsonDecode(data) as Map<String, Object?>;
+      handler(payload);
+    } catch (error) {
+      onState(RosConnectionState.connected, 'ROS 메시지 파싱 무시: $error');
+    }
   }
 
   void _setState(RosConnectionState next, String detail) {

@@ -1,0 +1,306 @@
+// 이 파일은 VICA_Supervisor 화면들이 공통으로 사용하는 모바일 카드형 UI 위젯을 제공합니다.
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../models/robot_status.dart';
+import '../models/supervisor_log.dart';
+
+class VicaColors {
+  const VicaColors._();
+
+  static const background = Color(0xFFF3F6FA);
+  static const card = Colors.white;
+  static const border = Color(0xFFDDE4EE);
+  static const primary = Color(0xFF5465A3);
+  static const primaryDark = Color(0xFF203F91);
+  static const text = Color(0xFF20222B);
+  static const muted = Color(0xFF667085);
+  static const softBlue = Color(0xFFE9EEF8);
+  static const green = Color(0xFF22A86A);
+  static const red = Color(0xFFE8424E);
+}
+
+class VicaPage extends StatelessWidget {
+  const VicaPage({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.children,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+      children: [
+        Text(title, style: Theme.of(context).textTheme.headlineSmall),
+        if (subtitle != null) ...[
+          const SizedBox(height: 10),
+          Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+        const SizedBox(height: 20),
+        ...children,
+      ],
+    );
+  }
+}
+
+class VicaCard extends StatelessWidget {
+  const VicaCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: VicaColors.card,
+        border: Border.all(color: VicaColors.border),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class VicaSectionTitle extends StatelessWidget {
+  const VicaSectionTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 14),
+      child: Text(text, style: Theme.of(context).textTheme.headlineSmall),
+    );
+  }
+}
+
+class VicaMetricCard extends StatelessWidget {
+  const VicaMetricCard({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return VicaCard(
+      child: Row(
+        children: [
+          _IconBox(icon: icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+          Text(value, style: Theme.of(context).textTheme.headlineSmall),
+        ],
+      ),
+    );
+  }
+}
+
+class VicaRobotCard extends StatelessWidget {
+  const VicaRobotCard({
+    super.key,
+    required this.robot,
+    this.onTap,
+    this.selected = false,
+  });
+
+  final RobotStatus robot;
+  final VoidCallback? onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return VicaCard(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _IconBox(icon: Icons.smart_toy, color: VicaColors.primaryDark),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          robot.robotName,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      _Pill(
+                        text: _statusLabel(robot.status),
+                        color: robot.hasError ? VicaColors.red : VicaColors.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('ID: ${robot.robotId}', style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 8,
+                    children: [
+                      _InfoChip(icon: Icons.location_on_outlined, text: '현재 위치: ${_empty(robot.currentLocation, '수신 대기')}'),
+                      _InfoChip(icon: Icons.flag_outlined, text: '목적지: ${_empty(robot.currentGoal, '없음')}'),
+                      _InfoChip(icon: Icons.schedule, text: '마지막 통신: ${_relativeTime(robot.timestamp)}'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class VicaLogTile extends StatelessWidget {
+  const VicaLogTile({
+    super.key,
+    required this.log,
+  });
+
+  final SupervisorLog log;
+
+  @override
+  Widget build(BuildContext context) {
+    final format = DateFormat('HH:mm');
+    return VicaCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const _IconBox(icon: Icons.info_outline, color: VicaColors.primaryDark),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(log.message, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(log.filter.label, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ),
+          Text(format.format(log.createdAt), style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _IconBox extends StatelessWidget {
+  const _IconBox({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: color, size: 24),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF758198)),
+        const SizedBox(width: 4),
+        Text(text, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: color, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+String _empty(String value, String fallback) => value.trim().isEmpty ? fallback : value;
+
+String _statusLabel(String status) {
+  return switch (status) {
+    'moving' => '운행',
+    'waiting' => '대기',
+    'error' => '오류',
+    'idle' => '대기',
+    _ => status.isEmpty ? '대기' : status,
+  };
+}
+
+String _relativeTime(DateTime time) {
+  final diff = DateTime.now().difference(time);
+  if (diff.inMinutes < 1) {
+    return '방금 전';
+  }
+  if (diff.inHours < 1) {
+    return '${diff.inMinutes}분 전';
+  }
+  return '${diff.inHours}시간 전';
+}

@@ -10,5 +10,6 @@ android/app/debug
 android/app/profile
 android/app/release
 *.iml
+.idea/
 __pycache__/
 *.pyc
