@@ -17,6 +17,7 @@ class MapCanvas extends StatelessWidget {
     this.robot,
     this.draftLocation,
     this.onTapMap,
+    this.onSelectLocation,
   });
 
   final VicaMap map;
@@ -26,6 +27,7 @@ class MapCanvas extends StatelessWidget {
   final RobotStatus? robot;
   final LocationPoint? draftLocation;
   final ValueChanged<Offset>? onTapMap;
+  final ValueChanged<LocationPoint>? onSelectLocation;
 
   String get _imageUrl {
     if (map.imageUrl.startsWith('http://') ||
@@ -90,14 +92,20 @@ class MapCanvas extends StatelessWidget {
                       ),
                     ),
                     ...locations.map(
-                      (location) => _Marker(
-                        offset: _scaledOffset(location.x, location.y, scale),
-                        label: location.name,
-                        color: selectedLocationId == location.locationId
-                            ? Colors.deepOrange
-                            : Colors.blue,
-                        size: selectedLocationId == location.locationId ? 18 : 10,
-                      ),
+                      (location) => selectedLocationId == location.locationId
+                          ? _SelectedLocationMarker(
+                              offset: _scaledOffset(location.x, location.y, scale),
+                              label: location.name,
+                            )
+                          : _Marker(
+                              offset: _scaledOffset(location.x, location.y, scale),
+                              label: location.name,
+                              color: Colors.blue,
+                              size: 7,
+                              onTap: onSelectLocation == null
+                                  ? null
+                                  : () => onSelectLocation!(location),
+                            ),
                     ),
                     if (draftLocation != null)
                       _Marker(
@@ -108,7 +116,7 @@ class MapCanvas extends StatelessWidget {
                         ),
                         label: '임시',
                         color: Colors.green,
-                        size: 16,
+                        size: 8,
                       ),
                     if (robot != null && robot!.mapId == map.mapId)
                       _RobotMarker(
@@ -150,18 +158,76 @@ class MapCanvas extends StatelessWidget {
   }
 }
 
+class _SelectedLocationMarker extends StatelessWidget {
+  const _SelectedLocationMarker({
+    required this.offset,
+    required this.label,
+  });
+
+  final Offset offset;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: offset.dx - 28,
+      top: offset.dy - 32,
+      width: 56,
+      child: IgnorePointer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.location_on,
+              color: Colors.deepOrange,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Marker extends StatelessWidget {
   const _Marker({
     required this.offset,
     required this.label,
     required this.color,
     required this.size,
+    this.onTap,
   });
 
   final Offset offset;
   final String label;
   final Color color;
   final double size;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -170,13 +236,16 @@ class _Marker extends StatelessWidget {
       top: offset.dy - size / 2,
       child: Tooltip(
         message: label,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+        child: GestureDetector(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.4),
+            ),
+            child: SizedBox(width: size, height: size),
           ),
-          child: SizedBox(width: size, height: size),
         ),
       ),
     );

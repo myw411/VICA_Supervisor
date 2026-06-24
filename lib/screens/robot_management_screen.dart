@@ -32,25 +32,64 @@ class _RobotManagementScreenState extends State<RobotManagementScreen> {
           (robot) => VicaRobotCard(
             robot: robot,
             selected: selected.robotId == robot.robotId,
-            onTap: () => setState(() => _selectedRobotId = robot.robotId),
-          ),
-        ),
-        VicaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('상세 정보', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 14),
-              _Info(label: '상태', value: selected.status),
-              _Info(label: '현재 위치', value: selected.currentLocation),
-              _Info(label: '목적지', value: selected.currentGoal),
-              _Info(label: '오류 사유', value: selected.errorReason),
-              _Info(label: '대기 사유', value: selected.waitingReason),
-              _Info(label: '마지막 통신', value: selected.timestamp.toLocal().toString()),
-            ],
+            onTap: () {
+              setState(() => _selectedRobotId = robot.robotId);
+              _showRobotDetail(context, robot);
+            },
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showRobotDetail(BuildContext context, RobotStatus robot) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            color: VicaColors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: VicaColors.muted,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('상세 정보', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 14),
+                _Info(label: '상태', value: robot.status),
+                _Info(label: '현재 위치', value: robot.currentLocation),
+                _Info(label: '목적지', value: robot.currentGoal),
+                _Info(label: '오류 사유', value: robot.errorReason),
+                _Info(label: '대기 사유', value: robot.waitingReason),
+                _Info(label: '마지막 통신', value: robot.timestamp.toLocal().toString()),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  icon: const Icon(Icons.check),
+                  label: const Text('확인'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

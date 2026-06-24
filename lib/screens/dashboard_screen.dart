@@ -11,6 +11,8 @@ import '../widgets/vica_ui.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
+  static const double metricLabelFontSize = 16;
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>().settings;
@@ -60,35 +62,40 @@ class DashboardScreen extends StatelessWidget {
         const SizedBox(height: 18),
         GridView.count(
           crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 4,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.25,
+          childAspectRatio: 1.7,
           children: [
             VicaMetricCard(
               icon: Icons.smart_toy,
               label: '전체 로봇',
               value: robots.length.toString(),
               color: VicaColors.primaryDark,
+              labelFontSize: metricLabelFontSize,
             ),
             VicaMetricCard(
               icon: Icons.navigation,
               label: '운행 중',
               value: moving.toString(),
               color: VicaColors.green,
+              labelFontSize: metricLabelFontSize,
             ),
             VicaMetricCard(
               icon: Icons.hourglass_empty,
               label: '대기 중',
               value: waiting.toString(),
               color: Colors.blueAccent,
+              labelFontSize: metricLabelFontSize,
             ),
             VicaMetricCard(
               icon: Icons.warning,
               label: '오류/긴급 정지',
               value: errors.toString(),
               color: VicaColors.red,
+              labelMaxLines: 2,
+              labelFontSize: metricLabelFontSize,
             ),
           ],
         ),

@@ -39,13 +39,13 @@ class MapLocationsScreen extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             SizedBox(
-              width: 104,
+              width: 112,
               child: OutlinedButton.icon(
                 onPressed: map == null
                     ? null
                     : () => supervisor.requestLocationList(settings, map.mapId),
                 icon: const Icon(Icons.sync, size: 18),
-                label: const Text('동기화'),
+                label: const Text('동기화', maxLines: 1),
               ),
             ),
           ],
@@ -64,6 +64,8 @@ class MapLocationsScreen extends StatelessWidget {
                 locations: locations,
                 selectedLocationId: supervisor.selectedLocationId,
                 robot: supervisor.primaryRobot,
+                onSelectLocation: (location) =>
+                    supervisor.selectLocation(location.locationId),
               ),
             ),
           ),
@@ -76,7 +78,7 @@ class MapLocationsScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '저장된 장소 목록',
+                        '저장 장소 목록',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),

@@ -17,10 +17,19 @@ class SaveLocationScreen extends StatefulWidget {
 }
 
 class _SaveLocationScreenState extends State<SaveLocationScreen> {
+  static const _defaultCategories = [
+    '방',
+    '화장실',
+    '안내소',
+    '입출구',
+    '엘리베이터',
+    '에스컬레이터',
+  ];
+
   final _uuid = const Uuid();
   final _nameController = TextEditingController();
-  final _categoryController = TextEditingController(text: 'default');
-  final _yawController = TextEditingController(text: '0');
+  final _categoryController = TextEditingController();
+  final _yawController = TextEditingController();
   final _memoController = TextEditingController();
   Offset? _pickedRos;
   String? _deleteTargetId;
@@ -41,6 +50,9 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
     final map = supervisor.selectedMap;
     final locations = supervisor.locationsFor(map?.mapId);
     final deleteTarget = _selectedLocation(locations);
+    final draft = supervisor.draftLocation;
+    final previewLocation =
+        draft ?? (map == null ? null : _previewLocation(map.mapId));
 
     return VicaPage(
       title: '장소 저장',
@@ -64,7 +76,7 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
             ),
             const SizedBox(width: 10),
             SizedBox(
-              width: 112,
+              width: 132,
               child: OutlinedButton.icon(
                 onPressed: map == null
                     ? null
@@ -87,8 +99,12 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                 map: map,
                 settings: settings,
                 locations: locations,
-                draftLocation: supervisor.draftLocation,
-                onTapMap: (ros) => setState(() => _pickedRos = ros),
+                draftLocation: previewLocation,
+                onTapMap: (ros) {
+                  supervisor.setDraftLocation(null);
+                  setState(() => _pickedRos = ros);
+                  _showLocationInfoSheet(context, supervisor, map.mapId);
+                },
               ),
             ),
           ),
@@ -101,7 +117,7 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        '저장된 장소',
+                        '저장 장소',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -130,79 +146,161 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                   icon: const Icon(Icons.delete_outline),
                   label: const Text('선택 장소 삭제'),
                 ),
-              ],
-            ),
-          ),
-          VicaCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '장소 정보 패널',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _pickedRos == null
-                          ? null
-                          : () => _saveDraft(supervisor, map.mapId),
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('수정'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _pickedRos == null
-                      ? '지도에서 위치를 선택하세요.'
-                      : '선택 좌표 x:${_pickedRos!.dx.toStringAsFixed(3)} y:${_pickedRos!.dy.toStringAsFixed(3)}',
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: '장소명'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _categoryController,
-                  decoration: const InputDecoration(labelText: '카테고리'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _yawController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'yaw'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _memoController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: '메모'),
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: _pickedRos == null
-                      ? null
-                      : () => _saveDraft(supervisor, map.mapId),
-                  icon: const Icon(Icons.add_location_alt),
-                  label: const Text('장소 임시 저장'),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: supervisor.draftLocation == null
-                      ? null
-                      : () => supervisor.saveDraftLocation(settings),
-                  icon: const Icon(Icons.cloud_upload),
-                  label: const Text('ROS2에 장소 저장'),
-                ),
+                if (draft != null) ...[
+                  const SizedBox(height: 14),
+                  _DraftSummary(location: draft),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => supervisor.saveDraftLocation(settings),
+                    icon: const Icon(Icons.cloud_upload),
+                    label: const Text('ROS2에 장소 저장'),
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _showLocationInfoSheet(
+    BuildContext context,
+    SupervisorProvider supervisor,
+    String mapId,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.78,
+            minChildSize: 0.42,
+            maxChildSize: 0.92,
+            builder: (context, scrollController) {
+              return DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: VicaColors.background,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                ),
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: VicaColors.muted,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      '장소 정보 패널',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    if (_pickedRos != null)
+                      Text(
+                        '선택 좌표 x:${_pickedRos!.dx.toStringAsFixed(3)} y:${_pickedRos!.dy.toStringAsFixed(3)}',
+                      ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: '장소명',
+                        hintText: '예: room_1',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _categoryController,
+                      decoration: InputDecoration(
+                        labelText: '카테고리',
+                        hintText: '직접 입력 또는 선택',
+                        suffixIcon: PopupMenuButton<String>(
+                          icon: const Icon(Icons.arrow_drop_down),
+                          onSelected: (value) =>
+                              _categoryController.text = value,
+                          itemBuilder: (context) => _defaultCategories
+                              .map(
+                                (category) => PopupMenuItem(
+                                  value: category,
+                                  child: Text(category),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _yawController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'yaw',
+                        hintText: '0',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _memoController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: '메모',
+                        hintText: '장소 설명',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: _pickedRos == null
+                          ? null
+                          : () {
+                              _saveDraft(supervisor, mapId);
+                              Navigator.of(sheetContext).pop();
+                            },
+                      icon: const Icon(Icons.add_location_alt),
+                      label: const Text('장소 임시 저장'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close),
+                      label: const Text('취소'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  LocationPoint? _previewLocation(String mapId) {
+    final picked = _pickedRos;
+    if (picked == null) {
+      return null;
+    }
+    return LocationPoint(
+      locationId: 'preview_location',
+      mapId: mapId,
+      name: '선택 위치',
+      category: '',
+      x: picked.dx,
+      y: picked.dy,
+      yaw: 0,
+      memo: '',
     );
   }
 
@@ -227,12 +325,47 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
       LocationPoint(
         locationId: _uuid.v4(),
         mapId: mapId,
-        name: _nameController.text.trim(),
-        category: _categoryController.text.trim(),
+        name: _nameController.text.trim().isEmpty
+            ? '새 장소'
+            : _nameController.text.trim(),
+        category: _categoryController.text.trim().isEmpty
+            ? '방'
+            : _categoryController.text.trim(),
         x: picked.dx,
         y: picked.dy,
         yaw: double.tryParse(_yawController.text.trim()) ?? 0,
         memo: _memoController.text.trim(),
+      ),
+    );
+  }
+}
+
+class _DraftSummary extends StatelessWidget {
+  const _DraftSummary({required this.location});
+
+  final LocationPoint location;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: VicaColors.softBlue,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('임시 저장된 장소', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          Text('이름: ${location.name}'),
+          Text('카테고리: ${location.category}'),
+          Text(
+            '좌표: x ${location.x.toStringAsFixed(3)}, y ${location.y.toStringAsFixed(3)}, yaw ${location.yaw.toStringAsFixed(2)}',
+          ),
+          if (location.memo.isNotEmpty) Text('메모: ${location.memo}'),
+        ],
       ),
     );
   }

@@ -102,24 +102,59 @@ class VicaMetricCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
+    this.labelMaxLines = 1,
+    this.labelFontSize = 12,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final Color color;
+  final int labelMaxLines;
+  final double labelFontSize;
 
   @override
   Widget build(BuildContext context) {
     return VicaCard(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          _IconBox(icon: icon, color: color),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+          _MetricIconBox(icon: icon, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: labelMaxLines,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: labelFontSize,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
           Text(value, style: Theme.of(context).textTheme.headlineSmall),
         ],
       ),
+    );
+  }
+}
+
+class _MetricIconBox extends StatelessWidget {
+  const _MetricIconBox({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Icon(icon, color: color, size: 21),
     );
   }
 }

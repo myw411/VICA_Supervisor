@@ -19,6 +19,7 @@ class VicaSupervisorApp extends StatelessWidget {
       title: 'VICA_Supervisor',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        fontFamily: 'NanumGothic',
         scaffoldBackgroundColor: VicaColors.background,
         colorScheme: ColorScheme.fromSeed(
           seedColor: VicaColors.primary,
@@ -104,8 +105,8 @@ class _SupervisorShellState extends State<SupervisorShell> {
 
   static const _screens = [
     DashboardScreen(),
-    MapLocationsScreen(),
     SaveLocationScreen(),
+    MapLocationsScreen(),
     CurrentLocationScreen(),
     RobotManagementScreen(),
     LogsScreen(),
@@ -114,8 +115,8 @@ class _SupervisorShellState extends State<SupervisorShell> {
 
   static const _titles = [
     '대시보드',
-    '지도별 장소 보기',
     '장소 저장',
+    '지도별 장소 보기',
     '현재 위치',
     '로봇 관리',
     '알림 및 로그',
@@ -135,9 +136,19 @@ class _SupervisorShellState extends State<SupervisorShell> {
         ),
         actions: [
           IconButton(
-            onPressed: () => setState(() => _index = 5),
-            icon: const Icon(Icons.notifications_none),
-            tooltip: '알림 및 로그',
+            onPressed: () => setState(() => _index = 0),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: '대시보드',
+          ),
+          IconButton(
+            onPressed: () => setState(() => _index = 2),
+            icon: const Icon(Icons.map_outlined),
+            tooltip: '지도별 장소 보기',
+          ),
+          IconButton(
+            onPressed: () => setState(() => _index = 6),
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '설정',
           ),
           const SizedBox(width: 10),
         ],
@@ -159,12 +170,12 @@ class _SupervisorShellState extends State<SupervisorShell> {
             label: Text('대시보드'),
           ),
           NavigationDrawerDestination(
-            icon: Icon(Icons.map),
-            label: Text('지도별 장소 보기'),
-          ),
-          NavigationDrawerDestination(
             icon: Icon(Icons.add_location),
             label: Text('장소 저장'),
+          ),
+          NavigationDrawerDestination(
+            icon: Icon(Icons.map),
+            label: Text('지도별 장소 보기'),
           ),
           NavigationDrawerDestination(
             icon: Icon(Icons.my_location),
