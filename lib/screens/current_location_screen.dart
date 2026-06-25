@@ -1,62 +1,115 @@
-// 이 파일은 원격 제어 없이 로봇의 현재 위치와 주행 상태를 지도 위에 표시합니다.
+// 이 파일은 원격 제어 없이 선택한 로봇의 현재 위치와 주행 상태를 지도 위에 표시합니다.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/robot_status.dart';
 import '../models/vica_map.dart';
 import '../providers/settings_provider.dart';
 import '../providers/supervisor_provider.dart';
 import '../widgets/map_canvas.dart';
+import '../widgets/vica_ui.dart';
 
-class CurrentLocationScreen extends StatelessWidget {
+class CurrentLocationScreen extends StatefulWidget {
   const CurrentLocationScreen({super.key});
+
+  @override
+  State<CurrentLocationScreen> createState() => _CurrentLocationScreenState();
+}
+
+class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
+  String? _selectedRobotId;
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>().settings;
     final supervisor = context.watch<SupervisorProvider>();
-    final robot = supervisor.primaryRobot;
+    final robots = supervisor.robots;
+    final robot = _selectedRobot(robots);
     final map = robot == null
         ? supervisor.selectedMap
         : _findMapById(supervisor.maps, robot.mapId);
     final locations = supervisor.locationsFor(map?.mapId);
-    return robot == null
-        ? const Center(child: Text('로봇 상태를 아직 수신하지 않았습니다.'))
-        : Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: map == null
-                    ? const Center(child: Text('현재 map_id와 일치하는 지도가 없습니다.'))
-                    : MapCanvas(
-                        map: map,
-                        settings: settings,
-                        locations: locations,
-                        robot: robot,
-                      ),
-              ),
-              SizedBox(
-                width: 320,
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(robot.robotName,
-                        style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 12),
-                    _Info(label: 'x', value: robot.x.toStringAsFixed(3)),
-                    _Info(label: 'y', value: robot.y.toStringAsFixed(3)),
-                    _Info(label: 'yaw', value: robot.yaw.toStringAsFixed(2)),
-                    _Info(label: 'map_id', value: robot.mapId),
-                    _Info(label: '현재 위치명', value: robot.currentLocation),
-                    _Info(label: '목적지', value: robot.currentGoal),
-                    _Info(label: '주행 상태', value: robot.status),
-                    _Info(label: '오류 사유', value: robot.errorReason),
-                    _Info(label: '대기 사유', value: robot.waitingReason),
-                    _Info(label: '마지막 수신', value: robot.timestamp.toLocal().toString()),
-                  ],
+    final mapHeight = MediaQuery.sizeOf(context).height * 0.38;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+      children: [
+        Text('현재 위치', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 18),
+        VicaCard(
+          child: DropdownButtonFormField<String>(
+            initialValue: robot?.robotId,
+            decoration: const InputDecoration(labelText: '연결된 로봇'),
+            items: robots
+                .map(
+                  (item) => DropdownMenuItem(
+                    value: item.robotId,
+                    child: Text(item.robotName),
+                  ),
+                )
+                .toList(),
+            onChanged: robots.isEmpty
+                ? null
+                : (value) => setState(() => _selectedRobotId = value),
+          ),
+        ),
+        SizedBox(
+          height: mapHeight.clamp(260.0, 390.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: map == null
+                ? const ColoredBox(
+                    color: VicaColors.softBlue,
+                    child: Center(child: Text('현재 map_id와 일치하는 지도가 없습니다.')),
+                  )
+                : MapCanvas(
+                    map: map,
+                    settings: settings,
+                    locations: locations,
+                    robot: robot,
+                  ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (robot == null)
+          const VicaCard(child: Text('로봇 상태를 아직 수신하지 않았습니다.'))
+        else
+          VicaCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(robot.robotName, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 14),
+                _Info(label: 'x', value: robot.x.toStringAsFixed(3)),
+                _Info(label: 'y', value: robot.y.toStringAsFixed(3)),
+                _Info(label: 'yaw', value: robot.yaw.toStringAsFixed(2)),
+                _Info(label: 'map_id', value: robot.mapId),
+                _Info(label: '현재 위치명', value: robot.currentLocation),
+                _Info(label: '목적지', value: robot.currentGoal),
+                _Info(label: '주행 상태', value: robot.status),
+                _Info(label: '오류 사유', value: robot.errorReason),
+                _Info(label: '대기 사유', value: robot.waitingReason),
+                _Info(
+                  label: '마지막 수신',
+                  value: robot.timestamp.toLocal().toString(),
                 ),
-              ),
-            ],
-          );
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  RobotStatus? _selectedRobot(List<RobotStatus> robots) {
+    if (robots.isEmpty) {
+      return null;
+    }
+    for (final robot in robots) {
+      if (robot.robotId == _selectedRobotId) {
+        return robot;
+      }
+    }
+    return robots.first;
   }
 
   VicaMap? _findMapById(List<VicaMap> maps, String mapId) {
@@ -83,8 +136,11 @@ class _Info extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 90,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
           Expanded(child: Text(value.isEmpty ? '-' : value)),
         ],

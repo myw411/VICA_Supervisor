@@ -121,7 +121,7 @@ class MapCanvas extends StatelessWidget {
                     if (robot != null && robot!.mapId == map.mapId)
                       _RobotMarker(
                         offset: _scaledOffset(robot!.x, robot!.y, scale),
-                        yaw: robot!.yaw + settings.yawOffset,
+                        yaw: 90 - robot!.yaw + settings.yawOffset,
                         label: robot!.robotName,
                       ),
                   ],
@@ -265,17 +265,19 @@ class _RobotMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const markerSize = 7.0;
     return Positioned(
-      left: offset.dx - 14,
-      top: offset.dy - 14,
+      left: offset.dx - markerSize / 2,
+      top: offset.dy - markerSize / 2,
       child: Tooltip(
         message: label,
         child: Transform.rotate(
+          // ROS yaw는 y축이 위인 좌표계라 화면 좌표계에서는 회전 방향을 반대로 적용합니다.
           angle: yaw * 3.1415926535 / 180.0,
           child: const Icon(
             Icons.navigation,
             color: Colors.red,
-            size: 28,
+            size: markerSize,
           ),
         ),
       ),
