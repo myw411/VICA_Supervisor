@@ -12,6 +12,7 @@ class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   static const double metricLabelFontSize = 16;
+  static const double errorMetricLabelFontSize = 13;
 
   @override
   Widget build(BuildContext context) {
@@ -70,9 +71,10 @@ class DashboardScreen extends StatelessWidget {
           children: [
             VicaMetricCard(
               icon: Icons.smart_toy,
-              label: '전체 로봇',
+              label: '전체\n로봇',
               value: robots.length.toString(),
               color: VicaColors.primaryDark,
+              labelMaxLines: 2,
               labelFontSize: metricLabelFontSize,
             ),
             VicaMetricCard(
@@ -91,11 +93,11 @@ class DashboardScreen extends StatelessWidget {
             ),
             VicaMetricCard(
               icon: Icons.warning,
-              label: '오류/긴급 정지',
+              label: '오류/\n긴급 정지',
               value: errors.toString(),
               color: VicaColors.red,
               labelMaxLines: 2,
-              labelFontSize: metricLabelFontSize,
+              labelFontSize: errorMetricLabelFontSize,
             ),
           ],
         ),

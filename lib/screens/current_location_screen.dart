@@ -17,6 +17,12 @@ class CurrentLocationScreen extends StatefulWidget {
 }
 
 class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
+  static const _compactDropdownDecoration = InputDecoration(
+    labelText: '연결된 로봇',
+    isDense: true,
+    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+  );
+
   String? _selectedRobotId;
 
   @override
@@ -39,7 +45,7 @@ class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
         VicaCard(
           child: DropdownButtonFormField<String>(
             initialValue: robot?.robotId,
-            decoration: const InputDecoration(labelText: '연결된 로봇'),
+            decoration: _compactDropdownDecoration,
             items: robots
                 .map(
                   (item) => DropdownMenuItem(

@@ -17,6 +17,12 @@ class SaveLocationScreen extends StatefulWidget {
 }
 
 class _SaveLocationScreenState extends State<SaveLocationScreen> {
+  static const _compactDropdownDecoration = InputDecoration(
+    labelText: '불러올 지도',
+    isDense: true,
+    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+  );
+
   static const _defaultCategories = [
     '방',
     '화장실',
@@ -25,20 +31,20 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
     '엘리베이터',
     '에스컬레이터',
   ];
+  static const _yawDirectionOptions = ['앞', '뒤', '우측', '좌측'];
 
   final _uuid = const Uuid();
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
-  final _yawController = TextEditingController();
   final _memoController = TextEditingController();
   Offset? _pickedRos;
   String? _deleteTargetId;
+  String _yawDirection = '우측';
 
   @override
   void dispose() {
     _nameController.dispose();
     _categoryController.dispose();
-    _yawController.dispose();
     _memoController.dispose();
     super.dispose();
   }
@@ -62,7 +68,7 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: map?.mapId,
-                decoration: const InputDecoration(labelText: '불러올 지도'),
+                decoration: _compactDropdownDecoration,
                 items: supervisor.maps
                     .map(
                       (item) => DropdownMenuItem(
@@ -121,7 +127,8 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
-                    OutlinedButton(onPressed: null, child: Text('${locations.length}개')),
+                    OutlinedButton(
+                        onPressed: null, child: Text('${locations.length}개')),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -243,13 +250,26 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: _yawController,
-                      keyboardType: TextInputType.number,
+                    DropdownButtonFormField<String>(
+                      initialValue: _yawDirection,
                       decoration: const InputDecoration(
-                        labelText: 'yaw',
-                        hintText: '0',
+                        labelText: '방향',
+                        helperText: '저장 시 yaw 각도로 자동 변환됩니다.',
                       ),
+                      items: _yawDirectionOptions
+                          .map(
+                            (direction) => DropdownMenuItem(
+                              value: direction,
+                              child: Text(
+                                  '$direction (${_yawFromDirection(direction).toStringAsFixed(0)}도)'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _yawDirection = value);
+                        }
+                      },
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -333,10 +353,24 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
             : _categoryController.text.trim(),
         x: picked.dx,
         y: picked.dy,
-        yaw: double.tryParse(_yawController.text.trim()) ?? 0,
+        yaw: _yawFromDirection(_yawDirection),
         memo: _memoController.text.trim(),
       ),
     );
+  }
+
+  double _yawFromDirection(String direction) {
+    switch (direction) {
+      case '앞':
+        return 90;
+      case '뒤':
+        return 270;
+      case '좌측':
+        return 180;
+      case '우측':
+      default:
+        return 0;
+    }
   }
 }
 

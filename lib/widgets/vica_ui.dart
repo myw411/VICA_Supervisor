@@ -125,7 +125,8 @@ class VicaMetricCard extends StatelessWidget {
             child: Text(
               label,
               maxLines: labelMaxLines,
-              overflow: TextOverflow.ellipsis,
+              overflow: TextOverflow.visible,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontSize: labelFontSize,
                     fontWeight: FontWeight.w700,

@@ -10,6 +10,12 @@ import '../widgets/vica_ui.dart';
 class MapLocationsScreen extends StatelessWidget {
   const MapLocationsScreen({super.key});
 
+  static const _compactDropdownDecoration = InputDecoration(
+    labelText: '지도 선택',
+    isDense: true,
+    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+  );
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>().settings;
@@ -25,7 +31,7 @@ class MapLocationsScreen extends StatelessWidget {
             Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: map?.mapId,
-                decoration: const InputDecoration(labelText: '지도 선택'),
+                decoration: _compactDropdownDecoration,
                 items: supervisor.maps
                     .map(
                       (item) => DropdownMenuItem(

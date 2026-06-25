@@ -37,6 +37,7 @@ class VicaStatusAppNode(Node):
         self.latest_diagnostics: DiagnosticArray | None = None
         self.last_odom_time: datetime | None = None
         self.current_goal = ""
+        self.navigation_active = False
 
         # 앱은 /robot_status 하나만 구독하면 되도록 이 노드가 내부 topic을 요약합니다.
         self.publisher = self.create_publisher(String, "/robot_status", 10)
@@ -84,8 +85,10 @@ class VicaStatusAppNode(Node):
             self.current_goal = str(
                 payload.get("name") or payload.get("destination") or "",
             )
+            self.navigation_active = True
         elif event in {"goal_succeeded", "goal_failed", "goal_rejected"}:
             self.current_goal = ""
+            self.navigation_active = False
 
     def publish_status(self) -> None:
         """현재까지 수신한 정보를 앱용 /robot_status JSON으로 publish합니다."""
@@ -171,9 +174,11 @@ class VicaStatusAppNode(Node):
         return yaw % 360.0
 
     def _status(self, linear_x: float, angular_z: float, error_reason: str) -> str:
-        """오류가 있으면 error, 속도가 있으면 moving, 아니면 waiting으로 표시합니다."""
+        """오류가 있으면 error, 목표 주행 중이거나 속도가 있으면 moving으로 표시합니다."""
         if error_reason:
             return "error"
+        if self.navigation_active:
+            return "moving"
         if self._is_moving(linear_x, angular_z):
             return "moving"
         return "waiting"
@@ -216,6 +221,8 @@ class VicaStatusAppNode(Node):
             return ""
         if self.latest_odom is None:
             return "위치 데이터 수신 대기"
+        if self.navigation_active:
+            return ""
         if self._is_moving(linear_x, angular_z):
             return ""
         return "목표 없음"

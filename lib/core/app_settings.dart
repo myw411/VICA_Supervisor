@@ -5,12 +5,12 @@ import 'package:flutter/foundation.dart';
 class AppSettings {
   const AppSettings({
     // 기존 로컬 테스트 주소. 리눅스 데스크탑으로 동작 확인해 볼 때 사용
-    this.rosBridgeUrl = 'ws://127.0.0.1:9090',
-    this.mapHttpBaseUrl = 'http://127.0.0.1:8000',
+    // this.rosBridgeUrl = 'ws://127.0.0.1:9090',
+    // this.mapHttpBaseUrl = 'http://127.0.0.1:8000',
     //
     // Android 기기처럼 Jetson 밖에서 접속하는 실행 환경은 Jetson host IP를 사용합니다.
-    // this.rosBridgeUrl = 'ws://192.168.0.10:9090',
-    // this.mapHttpBaseUrl = 'http://192.168.0.10:8000',
+    this.rosBridgeUrl = 'ws://192.168.0.10:9090',
+    this.mapHttpBaseUrl = 'http://192.168.0.10:8000',
     this.locationStorageRoot = '~/ros2_ws/location',
     this.mapListRequestTopic = '/map_list_request',
     this.mapListTopic = '/map_list',
