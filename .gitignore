@@ -13,3 +13,6 @@ android/app/release
 .idea/
 __pycache__/
 *.pyc
+
+# VSCode C/C++ 확장이 자동 생성하는 인덱스 DB는 실행 중 계속 바뀌므로 Git에 올리지 않습니다.
+.vscode/browse.vc.db*

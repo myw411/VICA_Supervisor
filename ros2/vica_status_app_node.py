@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
-"""VICA 앱에 필요한 로봇 상태를 /robot_status JSON topic으로 요약해 publish하는 노드입니다."""
+"""VICA 앱에 필요한 로봇 상태를 /robot_status JSON topic으로 요약해 publish하는 노드입니다.
+
+연결 흐름:
+    VICA/Nav2 기존 topic
+        -> /amcl_pose, /odom, /diagnostics
+        -> VicaStatusAppNode
+        -> /robot_status
+        -> rosbridge
+        -> Flutter 앱
+
+    vica_goto_goal
+        -> /vica_goal_event
+        -> VicaStatusAppNode
+        -> /robot_status.current_goal/status
+        -> Flutter 앱
+
+앱이 /odom, /amcl_pose, /diagnostics 등 여러 ROS2 topic을 직접 구독하지 않도록,
+이 노드가 앱 화면에 필요한 값만 하나의 JSON 메시지로 요약합니다.
+"""
 
 import json
 import math
@@ -17,12 +35,23 @@ from std_msgs.msg import String
 
 
 class VicaStatusAppNode(Node):
-    """VICA 내부 ROS2 상태를 앱 화면에서 쓰기 쉬운 단일 JSON 메시지로 변환합니다."""
+    """VICA 내부 ROS2 상태를 앱 화면에서 쓰기 쉬운 단일 JSON 메시지로 변환합니다.
+
+    구독 topic:
+        /amcl_pose: map frame 기준 현재 위치와 방향
+        /odom: 선속도/각속도 기반 moving 보조 판단
+        /diagnostics: Nav2 오류/대기 사유 후보
+        /vica_goal_event: vica_goto_goal의 목적지 이벤트
+
+    발행 topic:
+        /robot_status: 앱 대시보드, 현재 위치, 로봇 관리 화면이 사용하는 상태 JSON
+    """
 
     def __init__(self) -> None:
         super().__init__("vica_status_app_node")
 
         # 앱 표시값과 장소 판정 기준은 파라미터로 바꿀 수 있게 둡니다.
+        # 실행 시 --ros-args -p map_id:=... 같은 방식으로 덮어쓸 수 있습니다.
         self.declare_parameter("robot_id", "vica_01")
         self.declare_parameter("robot_name", "VICA-01")
         self.declare_parameter("map_id", "vica_map_0604")
@@ -32,30 +61,50 @@ class VicaStatusAppNode(Node):
         self.declare_parameter("moving_angular_threshold", 0.05)
 
         self.storage_root = Path.home() / "ros2_ws" / "location"
+
+        # /odom은 odom frame pose도 갖고 있지만, 앱 지도 위 위치는 /amcl_pose를 우선합니다.
+        # 여기서는 주로 twist 속도를 읽어 실제 움직임 여부를 보조 판단합니다.
         self.latest_odom: Odometry | None = None
+
+        # /amcl_pose는 map frame 기준이므로 앱 지도 마커 위치와 가장 잘 맞습니다.
         self.latest_amcl_pose: PoseWithCovarianceStamped | None = None
+
+        # diagnostics는 오류/대기 사유 문자열을 만들 때만 사용합니다.
         self.latest_diagnostics: DiagnosticArray | None = None
         self.last_odom_time: datetime | None = None
+
+        # vica_goto_goal이 목표를 보내면 /vica_goal_event로 목적지 이름이 들어옵니다.
         self.current_goal = ""
+
+        # goal_sent/goal_accepted 이후에는 속도가 잠깐 0이어도 앱에 moving으로 유지합니다.
         self.navigation_active = False
 
         # 앱은 /robot_status 하나만 구독하면 되도록 이 노드가 내부 topic을 요약합니다.
         self.publisher = self.create_publisher(String, "/robot_status", 10)
+
+        # 주행 속도와 fallback 위치를 받습니다.
         self.create_subscription(Odometry, "/odom", self.handle_odom, 10)
+
+        # 지도 기준 현재 위치와 yaw를 받습니다.
         self.create_subscription(
             PoseWithCovarianceStamped,
             "/amcl_pose",
             self.handle_amcl_pose,
             10,
         )
+
+        # Nav2 lifecycle/diagnostic 상태에서 오류 문구 후보를 받습니다.
         self.create_subscription(
             DiagnosticArray,
             "/diagnostics",
             self.handle_diagnostics,
             10,
         )
+
+        # 저장 좌표 주행 노드가 발행하는 goal 이벤트를 받아 current_goal/status에 반영합니다.
         self.create_subscription(String, "/vica_goal_event", self.handle_goal_event, 10)
 
+        # 주기적으로 최신 상태를 JSON으로 만들어 /robot_status에 보냅니다.
         period = float(self.get_parameter("publish_period_sec").value)
         self.timer = self.create_timer(period, self.publish_status)
 
@@ -73,7 +122,16 @@ class VicaStatusAppNode(Node):
         self.latest_diagnostics = msg
 
     def handle_goal_event(self, msg: String) -> None:
-        """vica_goto_goal 노드의 목적지 이벤트를 받아 앱의 현재 목적지로 표시합니다."""
+        """vica_goto_goal 노드의 목적지 이벤트를 받아 앱의 현재 목적지로 표시합니다.
+
+        event 처리:
+            goal_sent/goal_accepted:
+                목적지 이름을 current_goal에 저장하고 navigation_active를 True로 만듭니다.
+            goal_succeeded/goal_failed/goal_rejected:
+                목적지 표시를 비우고 navigation_active를 False로 만듭니다.
+
+        이 흐름 덕분에 주행 중 속도가 잠깐 0이 되어도 앱 상태가 waiting으로 튀지 않습니다.
+        """
         try:
             payload = json.loads(msg.data)
         except json.JSONDecodeError:
@@ -91,7 +149,11 @@ class VicaStatusAppNode(Node):
             self.navigation_active = False
 
     def publish_status(self) -> None:
-        """현재까지 수신한 정보를 앱용 /robot_status JSON으로 publish합니다."""
+        """현재까지 수신한 정보를 앱용 /robot_status JSON으로 publish합니다.
+
+        이 함수는 timer로 주기 실행됩니다. callback들이 최신 값을 멤버 변수에 저장하고,
+        이 함수가 그 값들을 조합해 앱이 바로 표시할 수 있는 JSON을 만듭니다.
+        """
         map_id = str(self.get_parameter("map_id").value)
         x, y, yaw, linear_x, angular_z = self._read_odom_values()
         error_reason = self._diagnostic_reason(min_level=2)
@@ -118,7 +180,16 @@ class VicaStatusAppNode(Node):
         self.publisher.publish(msg)
 
     def _read_odom_values(self) -> tuple[float, float, float, float, float]:
-        """map frame 위치를 우선 사용하고, /odom은 속도와 fallback 위치에 사용합니다."""
+        """map frame 위치를 우선 사용하고, /odom은 속도와 fallback 위치에 사용합니다.
+
+        반환값:
+            (x, y, yaw_degree, linear_x, angular_z)
+
+        우선순위:
+            1. /amcl_pose가 있으면 x/y/yaw는 map frame 값을 사용합니다.
+            2. /amcl_pose가 아직 없으면 /odom pose를 fallback으로 사용합니다.
+            3. 속도는 항상 /odom.twist에서 읽습니다.
+        """
         linear_x = 0.0
         angular_z = 0.0
         if self.latest_odom is not None:
@@ -167,14 +238,25 @@ class VicaStatusAppNode(Node):
         z: float,
         w: float,
     ) -> float:
-        """ROS orientation quaternion을 지도 화면에서 보기 쉬운 degree yaw로 변환합니다."""
+        """ROS orientation quaternion을 지도 화면에서 보기 쉬운 degree yaw로 변환합니다.
+
+        /amcl_pose와 /odom orientation은 quaternion입니다. 앱과 저장 좌표는 degree yaw를
+        사용하므로 z축 회전(yaw)만 뽑아 0~360도 범위로 정규화합니다.
+        """
         siny_cosp = 2.0 * (w * z + x * y)
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
         yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp))
         return yaw % 360.0
 
     def _status(self, linear_x: float, angular_z: float, error_reason: str) -> str:
-        """오류가 있으면 error, 목표 주행 중이거나 속도가 있으면 moving으로 표시합니다."""
+        """오류가 있으면 error, 목표 주행 중이거나 속도가 있으면 moving으로 표시합니다.
+
+        status 우선순위:
+            1. diagnostics 오류가 있으면 error
+            2. vica_goto_goal 목표가 active이면 moving
+            3. /odom 속도가 임계값 이상이면 moving
+            4. 그 외에는 waiting
+        """
         if error_reason:
             return "error"
         if self.navigation_active:
@@ -190,7 +272,11 @@ class VicaStatusAppNode(Node):
         return abs(linear_x) >= linear_threshold or abs(angular_z) >= angular_threshold
 
     def _diagnostic_reason(self, min_level: int) -> str:
-        """diagnostics에서 min_level 이상의 첫 메시지를 앱에 보여줄 문자열로 만듭니다."""
+        """diagnostics에서 min_level 이상의 첫 메시지를 앱에 보여줄 문자열로 만듭니다.
+
+        diagnostic level은 OK=0, WARN=1, ERROR=2, STALE=3 형태입니다.
+        현재는 ERROR 이상만 error_reason으로 사용하도록 min_level=2로 호출합니다.
+        """
         if self.latest_diagnostics is None:
             return ""
 
@@ -201,7 +287,11 @@ class VicaStatusAppNode(Node):
         return ""
 
     def _diagnostic_level(self, level: Any) -> int:
-        """diagnostic level이 byte/string/int 중 어떤 형태로 와도 숫자로 변환합니다."""
+        """diagnostic level이 byte/string/int 중 어떤 형태로 와도 숫자로 변환합니다.
+
+        ros2 topic echo에서는 level이 문자열처럼 보일 수 있고, Python 메시지에서는 int 또는
+        bytes처럼 들어올 수 있어 방어적으로 변환합니다.
+        """
         if isinstance(level, int):
             return level
         if isinstance(level, bytes) and level:
@@ -216,7 +306,11 @@ class VicaStatusAppNode(Node):
         angular_z: float,
         error_reason: str,
     ) -> str:
-        """정지 상태일 때 앱에 표시할 대기 사유를 만듭니다."""
+        """정지 상태일 때 앱에 표시할 대기 사유를 만듭니다.
+
+        navigation_active이거나 실제 속도가 있으면 대기 사유를 비웁니다.
+        /odom이 없으면 위치/속도 데이터 자체가 없으므로 수신 대기로 표시합니다.
+        """
         if error_reason:
             return ""
         if self.latest_odom is None:
@@ -228,7 +322,11 @@ class VicaStatusAppNode(Node):
         return "목표 없음"
 
     def _nearest_location_name(self, map_id: str, x: float, y: float) -> str:
-        """저장된 장소 중 현재 위치와 0.5m 이내인 가장 가까운 장소명을 찾습니다."""
+        """저장된 장소 중 현재 위치와 설정 반경 이내인 가장 가까운 장소명을 찾습니다.
+
+        locations.json에 저장된 장소들과 현재 x/y 거리 차이를 계산합니다.
+        가까운 장소가 없으면 앱에는 "현재 위치 확인 중"으로 표시합니다.
+        """
         radius = float(self.get_parameter("location_match_radius").value)
         locations = self._read_locations(map_id)
         nearest_name = ""
@@ -249,7 +347,11 @@ class VicaStatusAppNode(Node):
         return nearest_name or "현재 위치 확인 중"
 
     def _read_locations(self, map_id: str) -> list[dict[str, Any]]:
-        """~/ros2_ws/location/<map_id>/locations.json에서 저장 장소 목록을 읽습니다."""
+        """~/ros2_ws/location/<map_id>/locations.json에서 저장 장소 목록을 읽습니다.
+
+        이 함수는 current_location 이름 판정에만 사용합니다. 장소 파일이 없거나 깨져도
+        상태 publish 자체는 계속되어야 하므로 예외를 잡고 빈 목록을 반환합니다.
+        """
         path = self.storage_root / map_id / "locations.json"
         if not path.exists():
             return []
@@ -264,6 +366,7 @@ class VicaStatusAppNode(Node):
 
 
 def main() -> None:
+    """ROS2 노드를 초기화하고 상태 topic들을 구독한 채 /robot_status를 계속 publish합니다."""
     rclpy.init()
     node = VicaStatusAppNode()
     try:
