@@ -19,6 +19,9 @@ class AppSettings {
     this.saveLocationTopic = '/save_location',
     this.deleteLocationRequestTopic = '/delete_location_request',
     this.robotStatusTopic = '/robot_status',
+    this.emergencyStopRequestTopic = '/safety/emergency_stop_request',
+    this.emergencyStopStateTopic = '/safety/emergency_stop_state',
+    this.emergencyStopTimeoutSeconds = 2,
     this.maxLogs = 200,
     this.maxReconnectAttempts = 5,
     this.autoRequestMapList = true,
@@ -40,6 +43,9 @@ class AppSettings {
   final String saveLocationTopic;
   final String deleteLocationRequestTopic;
   final String robotStatusTopic;
+  final String emergencyStopRequestTopic;
+  final String emergencyStopStateTopic;
+  final int emergencyStopTimeoutSeconds;
   final int maxLogs;
   final int maxReconnectAttempts;
   final bool autoRequestMapList;
@@ -61,6 +67,9 @@ class AppSettings {
     String? saveLocationTopic,
     String? deleteLocationRequestTopic,
     String? robotStatusTopic,
+    String? emergencyStopRequestTopic,
+    String? emergencyStopStateTopic,
+    int? emergencyStopTimeoutSeconds,
     int? maxLogs,
     int? maxReconnectAttempts,
     bool? autoRequestMapList,
@@ -84,9 +93,14 @@ class AppSettings {
       deleteLocationRequestTopic:
           deleteLocationRequestTopic ?? this.deleteLocationRequestTopic,
       robotStatusTopic: robotStatusTopic ?? this.robotStatusTopic,
+      emergencyStopRequestTopic:
+          emergencyStopRequestTopic ?? this.emergencyStopRequestTopic,
+      emergencyStopStateTopic:
+          emergencyStopStateTopic ?? this.emergencyStopStateTopic,
+      emergencyStopTimeoutSeconds:
+          emergencyStopTimeoutSeconds ?? this.emergencyStopTimeoutSeconds,
       maxLogs: maxLogs ?? this.maxLogs,
-      maxReconnectAttempts:
-          maxReconnectAttempts ?? this.maxReconnectAttempts,
+      maxReconnectAttempts: maxReconnectAttempts ?? this.maxReconnectAttempts,
       autoRequestMapList: autoRequestMapList ?? this.autoRequestMapList,
       autoRequestLocationList:
           autoRequestLocationList ?? this.autoRequestLocationList,
@@ -110,6 +124,9 @@ class AppSettings {
       'saveLocationTopic': saveLocationTopic,
       'deleteLocationRequestTopic': deleteLocationRequestTopic,
       'robotStatusTopic': robotStatusTopic,
+      'emergencyStopRequestTopic': emergencyStopRequestTopic,
+      'emergencyStopStateTopic': emergencyStopStateTopic,
+      'emergencyStopTimeoutSeconds': emergencyStopTimeoutSeconds,
       'maxLogs': maxLogs,
       'maxReconnectAttempts': maxReconnectAttempts,
       'autoRequestMapList': autoRequestMapList,
@@ -128,10 +145,10 @@ class AppSettings {
       rosBridgeUrl: json['rosBridgeUrl'] as String? ?? defaults.rosBridgeUrl,
       mapHttpBaseUrl:
           json['mapHttpBaseUrl'] as String? ?? defaults.mapHttpBaseUrl,
-      locationStorageRoot:
-          json['locationStorageRoot'] as String? ?? defaults.locationStorageRoot,
-      mapListRequestTopic:
-          json['mapListRequestTopic'] as String? ?? defaults.mapListRequestTopic,
+      locationStorageRoot: json['locationStorageRoot'] as String? ??
+          defaults.locationStorageRoot,
+      mapListRequestTopic: json['mapListRequestTopic'] as String? ??
+          defaults.mapListRequestTopic,
       mapListTopic: json['mapListTopic'] as String? ?? defaults.mapListTopic,
       locationListRequestTopic: json['locationListRequestTopic'] as String? ??
           defaults.locationListRequestTopic,
@@ -144,6 +161,13 @@ class AppSettings {
               defaults.deleteLocationRequestTopic,
       robotStatusTopic:
           json['robotStatusTopic'] as String? ?? defaults.robotStatusTopic,
+      emergencyStopRequestTopic: json['emergencyStopRequestTopic'] as String? ??
+          defaults.emergencyStopRequestTopic,
+      emergencyStopStateTopic: json['emergencyStopStateTopic'] as String? ??
+          defaults.emergencyStopStateTopic,
+      emergencyStopTimeoutSeconds:
+          (json['emergencyStopTimeoutSeconds'] as num?)?.toInt() ??
+              defaults.emergencyStopTimeoutSeconds,
       maxLogs: json['maxLogs'] as int? ?? defaults.maxLogs,
       maxReconnectAttempts:
           json['maxReconnectAttempts'] as int? ?? defaults.maxReconnectAttempts,

@@ -127,7 +127,7 @@ class VicaStatusAppNode(Node):
         event 처리:
             goal_sent/goal_accepted:
                 목적지 이름을 current_goal에 저장하고 navigation_active를 True로 만듭니다.
-            goal_succeeded/goal_failed/goal_rejected:
+            goal_succeeded/goal_failed/goal_rejected/goal_canceled:
                 목적지 표시를 비우고 navigation_active를 False로 만듭니다.
 
         이 흐름 덕분에 주행 중 속도가 잠깐 0이 되어도 앱 상태가 waiting으로 튀지 않습니다.
@@ -144,7 +144,13 @@ class VicaStatusAppNode(Node):
                 payload.get("name") or payload.get("destination") or "",
             )
             self.navigation_active = True
-        elif event in {"goal_succeeded", "goal_failed", "goal_rejected"}:
+        elif event in {
+            "goal_succeeded",
+            "goal_failed",
+            "goal_rejected",
+            "goal_canceled",
+            "emergency_stopped",
+        }:
             self.current_goal = ""
             self.navigation_active = False
 

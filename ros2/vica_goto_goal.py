@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import rclpy
+from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
@@ -175,10 +176,19 @@ class VicaGotoGoal(Node):
             return False
 
         status = int(result.status)
-        if status == 4:
+        if status == GoalStatus.STATUS_SUCCEEDED:
             self.publish_goal_event("goal_succeeded", location)
             self.get_logger().info(f"Goal succeeded: {location.name}")
             return True
+
+        if status == GoalStatus.STATUS_CANCELED:
+            self.publish_goal_event(
+                "goal_canceled",
+                location,
+                "비상정지 또는 외부 요청으로 목적지가 취소되었습니다.",
+            )
+            self.get_logger().warn(f"Goal canceled: {location.name}")
+            return False
 
         self.publish_goal_event("goal_failed", location, f"Nav2 result status={status}")
         self.get_logger().warn(f"Goal finished with status={status}: {location.name}")
@@ -197,6 +207,7 @@ class VicaGotoGoal(Node):
             goal_accepted: Nav2 action server가 goal을 수락
             goal_rejected: Nav2가 goal을 거절
             goal_succeeded: 목적지 도착 성공
+            goal_canceled: 비상정지 또는 외부 요청으로 목적지 취소
             goal_failed: 주행 실패 또는 action server 없음
             goal_dry_run: --dry-run으로 검색만 확인
 

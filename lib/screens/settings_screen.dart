@@ -55,7 +55,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('네트워크 및 ROS', style: Theme.of(context).textTheme.titleMedium),
+              Text('네트워크 및 ROS',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               _Field(controller: _c('mapHttpBaseUrl'), label: '지도 이미지 URL'),
               _Field(controller: _c('rosBridgeUrl'), label: 'ROS Bridge 주소'),
@@ -67,7 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ExpansionTile(
             tilePadding: EdgeInsets.zero,
             childrenPadding: EdgeInsets.zero,
-            title: Text('고급 설정', style: Theme.of(context).textTheme.titleMedium),
+            title:
+                Text('고급 설정', style: Theme.of(context).textTheme.titleMedium),
             children: [
               const SizedBox(height: 8),
               SwitchListTile(
@@ -75,7 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('지도 목록 자동 요청'),
                 value: _settings.autoRequestMapList,
                 onChanged: (value) => setState(
-                  () => _settings = _settings.copyWith(autoRequestMapList: value),
+                  () =>
+                      _settings = _settings.copyWith(autoRequestMapList: value),
                 ),
               ),
               SwitchListTile(
@@ -87,17 +90,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _settings.copyWith(autoRequestLocationList: value),
                 ),
               ),
-              _Field(controller: _c('mapListRequestTopic'), label: '지도 목록 요청 topic'),
+              _Field(
+                  controller: _c('mapListRequestTopic'),
+                  label: '지도 목록 요청 topic'),
               _Field(controller: _c('mapListTopic'), label: '지도 목록 topic'),
-              _Field(controller: _c('locationListRequestTopic'), label: '장소 목록 요청 topic'),
+              _Field(
+                  controller: _c('locationListRequestTopic'),
+                  label: '장소 목록 요청 topic'),
               _Field(controller: _c('locationListTopic'), label: '장소 목록 topic'),
               _Field(controller: _c('saveLocationTopic'), label: '장소 저장 topic'),
-              _Field(controller: _c('deleteLocationRequestTopic'), label: '장소 삭제 요청 topic'),
+              _Field(
+                  controller: _c('deleteLocationRequestTopic'),
+                  label: '장소 삭제 요청 topic'),
               _Field(controller: _c('robotStatusTopic'), label: '로봇 상태 topic'),
+              _Field(
+                controller: _c('emergencyStopRequestTopic'),
+                label: '비상정지 요청 topic',
+              ),
+              _Field(
+                controller: _c('emergencyStopStateTopic'),
+                label: '비상정지 상태 topic',
+              ),
+              _Field(
+                controller: _c('emergencyStopTimeoutSeconds'),
+                label: '비상정지 응답 제한시간(초)',
+                number: true,
+              ),
               _Field(controller: _c('xOffset'), label: 'x 보정값', number: true),
               _Field(controller: _c('yOffset'), label: 'y 보정값', number: true),
-              _Field(controller: _c('yawOffset'), label: 'yaw 보정값', number: true),
-              _Field(controller: _c('mapScale'), label: '지도 스케일 보정값', number: true),
+              _Field(
+                  controller: _c('yawOffset'), label: 'yaw 보정값', number: true),
+              _Field(
+                  controller: _c('mapScale'),
+                  label: '지도 스케일 보정값',
+                  number: true),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('지도 Y축 반전'),
@@ -133,6 +159,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'saveLocationTopic': settings.saveLocationTopic,
       'deleteLocationRequestTopic': settings.deleteLocationRequestTopic,
       'robotStatusTopic': settings.robotStatusTopic,
+      'emergencyStopRequestTopic': settings.emergencyStopRequestTopic,
+      'emergencyStopStateTopic': settings.emergencyStopStateTopic,
+      'emergencyStopTimeoutSeconds':
+          settings.emergencyStopTimeoutSeconds.toString(),
       'xOffset': settings.xOffset.toString(),
       'yOffset': settings.yOffset.toString(),
       'yawOffset': settings.yawOffset.toString(),
@@ -162,6 +192,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       saveLocationTopic: _c('saveLocationTopic').text.trim(),
       deleteLocationRequestTopic: _c('deleteLocationRequestTopic').text.trim(),
       robotStatusTopic: _c('robotStatusTopic').text.trim(),
+      emergencyStopRequestTopic: _c('emergencyStopRequestTopic').text.trim(),
+      emergencyStopStateTopic: _c('emergencyStopStateTopic').text.trim(),
+      emergencyStopTimeoutSeconds:
+          int.tryParse(_c('emergencyStopTimeoutSeconds').text.trim()) ?? 2,
       xOffset: double.tryParse(_c('xOffset').text.trim()) ?? 0,
       yOffset: double.tryParse(_c('yOffset').text.trim()) ?? 0,
       yawOffset: double.tryParse(_c('yawOffset').text.trim()) ?? 0,

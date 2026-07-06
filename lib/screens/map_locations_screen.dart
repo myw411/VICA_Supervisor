@@ -32,11 +32,28 @@ class MapLocationsScreen extends StatelessWidget {
               child: DropdownButtonFormField<String>(
                 initialValue: map?.mapId,
                 decoration: _compactDropdownDecoration,
+                isExpanded: true,
+                itemHeight: null,
                 items: supervisor.maps
                     .map(
                       (item) => DropdownMenuItem(
                         value: item.mapId,
-                        child: Text(item.mapName),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(item.mapName),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                selectedItemBuilder: (context) => supervisor.maps
+                    .map(
+                      (item) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          item.mapName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
@@ -105,7 +122,8 @@ class MapLocationsScreen extends StatelessWidget {
                       selected: selected,
                       avatar: Icon(
                         selected ? Icons.check_circle : Icons.location_on,
-                        color: selected ? VicaColors.text : VicaColors.primaryDark,
+                        color:
+                            selected ? VicaColors.text : VicaColors.primaryDark,
                         size: 18,
                       ),
                       label: Text(location.name),

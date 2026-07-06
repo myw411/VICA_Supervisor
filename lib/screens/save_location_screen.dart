@@ -69,11 +69,28 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
               child: DropdownButtonFormField<String>(
                 initialValue: map?.mapId,
                 decoration: _compactDropdownDecoration,
+                isExpanded: true,
+                itemHeight: null,
                 items: supervisor.maps
                     .map(
                       (item) => DropdownMenuItem(
                         value: item.mapId,
-                        child: Text(item.mapName),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(item.mapName),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                selectedItemBuilder: (context) => supervisor.maps
+                    .map(
+                      (item) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          item.mapName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
@@ -357,6 +374,17 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
         memo: _memoController.text.trim(),
       ),
     );
+    _clearLocationForm();
+  }
+
+  void _clearLocationForm() {
+    _nameController.clear();
+    _categoryController.clear();
+    _memoController.clear();
+    setState(() {
+      _pickedRos = null;
+      _yawDirection = '우측';
+    });
   }
 
   double _yawFromDirection(String direction) {

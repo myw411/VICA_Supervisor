@@ -13,6 +13,15 @@ import '../models/supervisor_log.dart';
 import '../models/vica_map.dart';
 import '../ros/ros_bridge_client.dart';
 
+enum EmergencyStopState {
+  inactive,
+  activating,
+  active,
+  releasing,
+  activationFailed,
+  releaseFailed,
+}
+
 class SupervisorProvider extends ChangeNotifier {
   SupervisorProvider();
 
@@ -29,9 +38,18 @@ class SupervisorProvider extends ChangeNotifier {
   LocationPoint? _draftLocation;
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
+  Timer? _emergencyStopTimeoutTimer;
+  EmergencyStopState _emergencyStopState = EmergencyStopState.inactive;
+  String _emergencyStopMessage = '';
+  String? _pendingEmergencyRequestId;
+  int _emergencyRetryGeneration = 0;
 
   RosConnectionState get connectionState => _connectionState;
   String get connectionDetail => _connectionDetail;
+  EmergencyStopState get emergencyStopState => _emergencyStopState;
+  String get emergencyStopMessage => _emergencyStopMessage;
+  bool get emergencyOverlayVisible =>
+      _emergencyStopState != EmergencyStopState.inactive;
   List<VicaMap> get maps => _maps;
   String? get selectedMapId => _selectedMapId;
   String? get selectedLocationId => _selectedLocationId;
@@ -91,7 +109,8 @@ class SupervisorProvider extends ChangeNotifier {
 
   // 무한 재시도를 피하기 위해 설정된 횟수까지만 재연결합니다.
   void _scheduleReconnect(AppSettings settings) {
-    if (_client == null || _reconnectAttempts >= settings.maxReconnectAttempts) {
+    if (_client == null ||
+        _reconnectAttempts >= settings.maxReconnectAttempts) {
       return;
     }
     _reconnectTimer?.cancel();
@@ -117,7 +136,129 @@ class SupervisorProvider extends ChangeNotifier {
       ..subscribe(
         topic: settings.robotStatusTopic,
         handler: _handleRobotStatus,
+      )
+      ..subscribe(
+        topic: settings.emergencyStopStateTopic,
+        handler: _handleEmergencyStopState,
       );
+    _requestEmergencyStopState(settings);
+  }
+
+  void activateEmergencyStop(AppSettings settings) {
+    if (_connectionState != RosConnectionState.connected) {
+      _setEmergencyStopState(
+        EmergencyStopState.activationFailed,
+        'ROS Bridge에 연결되지 않아 비상정지를 활성화하지 못했습니다.',
+      );
+      _addLog(LogFilter.emergencyStop, '비상정지 요청 실패: ROS 연결 안 됨');
+      return;
+    }
+    _sendEmergencyCommand(
+      settings: settings,
+      command: 'activate',
+      pendingState: EmergencyStopState.activating,
+      timeoutState: EmergencyStopState.activationFailed,
+      pendingMessage: 'VICA에 비상정지를 요청하고 있습니다.',
+      timeoutMessage: 'app_emergency_node의 비상정지 응답이 없습니다.',
+    );
+  }
+
+  Future<void> retryEmergencyStop(AppSettings settings) async {
+    final generation = ++_emergencyRetryGeneration;
+    if (_connectionState != RosConnectionState.connected) {
+      await connect(settings);
+    }
+    if (generation != _emergencyRetryGeneration ||
+        _emergencyStopState != EmergencyStopState.activationFailed) {
+      return;
+    }
+    activateEmergencyStop(settings);
+  }
+
+  void dismissEmergencyStopFailure() {
+    if (_emergencyStopState != EmergencyStopState.activationFailed) {
+      return;
+    }
+    _emergencyRetryGeneration += 1;
+    _clearEmergencyStopPending();
+    _setEmergencyStopState(EmergencyStopState.inactive, '');
+    _addLog(LogFilter.emergencyStop, '비상정지 실패 알림 닫음');
+  }
+
+  void releaseEmergencyStop(AppSettings settings) {
+    if (_connectionState != RosConnectionState.connected) {
+      _setEmergencyStopState(
+        EmergencyStopState.releaseFailed,
+        'ROS Bridge에 연결되지 않아 비상정지를 해제하지 못했습니다.',
+      );
+      _addLog(LogFilter.emergencyStop, '비상정지 해제 실패: ROS 연결 안 됨');
+      return;
+    }
+    _sendEmergencyCommand(
+      settings: settings,
+      command: 'release',
+      pendingState: EmergencyStopState.releasing,
+      timeoutState: EmergencyStopState.releaseFailed,
+      pendingMessage: 'VICA에 비상정지 해제를 요청하고 있습니다.',
+      timeoutMessage: 'app_emergency_node의 비상정지 해제 응답이 없습니다.',
+    );
+  }
+
+  Future<void> retryEmergencyStopRelease(AppSettings settings) async {
+    if (_connectionState != RosConnectionState.connected) {
+      await connect(settings);
+    }
+    releaseEmergencyStop(settings);
+  }
+
+  void _sendEmergencyCommand({
+    required AppSettings settings,
+    required String command,
+    required EmergencyStopState pendingState,
+    required EmergencyStopState timeoutState,
+    required String pendingMessage,
+    required String timeoutMessage,
+  }) {
+    final requestId = _uuid.v4();
+    _pendingEmergencyRequestId = requestId;
+    _setEmergencyStopState(pendingState, pendingMessage);
+    _client?.publishJsonString(
+      topic: settings.emergencyStopRequestTopic,
+      payload: {
+        'request_id': requestId,
+        'command': command,
+        'source': 'vica_supervisor',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
+    _addLog(
+      LogFilter.emergencyStop,
+      command == 'activate' ? '비상정지 요청 전송' : '비상정지 해제 요청 전송',
+    );
+    _emergencyStopTimeoutTimer?.cancel();
+    _emergencyStopTimeoutTimer = Timer(
+      Duration(seconds: settings.emergencyStopTimeoutSeconds),
+      () {
+        if (_pendingEmergencyRequestId != requestId) {
+          return;
+        }
+        _pendingEmergencyRequestId = null;
+        _setEmergencyStopState(timeoutState, timeoutMessage);
+        _addLog(LogFilter.emergencyStop, timeoutMessage);
+      },
+    );
+  }
+
+  void _requestEmergencyStopState(AppSettings settings) {
+    _client?.publishJsonString(
+      topic: settings.emergencyStopRequestTopic,
+      payload: {
+        'request_id': _uuid.v4(),
+        'command': 'query',
+        'source': 'vica_supervisor',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
   }
 
   void requestMapList(AppSettings settings) {
@@ -255,7 +396,8 @@ class SupervisorProvider extends ChangeNotifier {
       return;
     }
     _locationsByMap[mapId] = nextLocations;
-    _addLog(LogFilter.coordinateTransfer, '$mapId 장소 ${nextLocations.length}개 수신');
+    _addLog(
+        LogFilter.coordinateTransfer, '$mapId 장소 ${nextLocations.length}개 수신');
     notifyListeners();
   }
 
@@ -268,8 +410,94 @@ class SupervisorProvider extends ChangeNotifier {
     }
     _robotsById[next.robotId] = next;
     if (next.hasError) {
-      _addLog(LogFilter.emergencyStop, '${next.robotName}: ${next.errorReason}');
+      _addLog(
+          LogFilter.emergencyStop, '${next.robotName}: ${next.errorReason}');
     }
+    notifyListeners();
+  }
+
+  void _handleEmergencyStopState(Map<String, Object?> message) {
+    final state = message['state'] as String? ?? '';
+    final requestId = message['request_id'] as String? ?? '';
+    final command = message['command'] as String? ?? '';
+    final responseMessage = message['message'] as String? ?? '';
+    final matchesPending =
+        requestId.isNotEmpty && requestId == _pendingEmergencyRequestId;
+
+    if (state == 'active') {
+      if (_emergencyStopState == EmergencyStopState.releaseFailed &&
+          command == 'status' &&
+          !matchesPending) {
+        return;
+      }
+      _clearEmergencyStopPending();
+      _setEmergencyStopState(
+        EmergencyStopState.active,
+        responseMessage.isEmpty
+            ? '비상정지가 활성화되었습니다. 기존 목적지는 취소되었습니다.'
+            : responseMessage,
+      );
+      if (matchesPending || command == 'activate') {
+        _addLog(LogFilter.emergencyStop, '비상정지 활성화 완료');
+      }
+      return;
+    }
+
+    if (state == 'inactive' || state == 'released') {
+      if (_emergencyStopState == EmergencyStopState.activating) {
+        return;
+      }
+      if (_emergencyStopState == EmergencyStopState.activationFailed &&
+          command != 'release') {
+        return;
+      }
+      if (_emergencyStopState == EmergencyStopState.releasing &&
+          !matchesPending &&
+          command != 'release') {
+        return;
+      }
+      _clearEmergencyStopPending();
+      _setEmergencyStopState(EmergencyStopState.inactive, '');
+      if (matchesPending || command == 'release') {
+        _addLog(LogFilter.emergencyStop, '비상정지 해제 완료');
+      }
+      return;
+    }
+
+    if (state == 'failed') {
+      if (_pendingEmergencyRequestId != null && !matchesPending) {
+        return;
+      }
+      final failedState = command == 'release' ||
+              _emergencyStopState == EmergencyStopState.releasing
+          ? EmergencyStopState.releaseFailed
+          : EmergencyStopState.activationFailed;
+      _clearEmergencyStopPending();
+      _setEmergencyStopState(
+        failedState,
+        responseMessage.isEmpty
+            ? 'app_emergency_node가 요청을 처리하지 못했습니다.'
+            : responseMessage,
+      );
+      _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
+    }
+  }
+
+  void _clearEmergencyStopPending() {
+    _emergencyStopTimeoutTimer?.cancel();
+    _emergencyStopTimeoutTimer = null;
+    _pendingEmergencyRequestId = null;
+  }
+
+  void _setEmergencyStopState(
+    EmergencyStopState next,
+    String message,
+  ) {
+    if (_emergencyStopState == next && _emergencyStopMessage == message) {
+      return;
+    }
+    _emergencyStopState = next;
+    _emergencyStopMessage = message;
     notifyListeners();
   }
 
@@ -304,6 +532,7 @@ class SupervisorProvider extends ChangeNotifier {
   @override
   void dispose() {
     _reconnectTimer?.cancel();
+    _emergencyStopTimeoutTimer?.cancel();
     unawaited(_client?.close());
     super.dispose();
   }
