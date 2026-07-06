@@ -265,9 +265,9 @@ class _EmergencyStopOverlay extends StatelessWidget {
     final title = switch (state) {
       EmergencyStopState.activating => '비상정지 요청 중',
       EmergencyStopState.active => '비상정지 활성화',
-      EmergencyStopState.releasing => '비상정지 해제 중',
+      EmergencyStopState.releasing => '비상정지 reset 중',
       EmergencyStopState.activationFailed => '비상정지 활성화 실패',
-      EmergencyStopState.releaseFailed => '비상정지 해제 실패',
+      EmergencyStopState.releaseFailed => '비상정지 reset 실패',
       EmergencyStopState.inactive => '',
     };
 
@@ -372,8 +372,8 @@ class _EmergencyStopOverlay extends StatelessWidget {
 
   String _actionLabel(EmergencyStopState state) {
     return switch (state) {
-      EmergencyStopState.active => '비상정지 해제',
-      EmergencyStopState.releaseFailed => '해제 다시 시도',
+      EmergencyStopState.active => 'reset',
+      EmergencyStopState.releaseFailed => 'reset 다시 시도',
       EmergencyStopState.activationFailed => '비상정지 다시 시도',
       _ => '',
     };
@@ -382,7 +382,7 @@ class _EmergencyStopOverlay extends StatelessWidget {
   void _handleAction(EmergencyStopState state) {
     switch (state) {
       case EmergencyStopState.active:
-        supervisor.releaseEmergencyStop(settings);
+        supervisor.resetEmergencyStop(settings);
         return;
       case EmergencyStopState.releaseFailed:
         supervisor.retryEmergencyStopRelease(settings);

@@ -185,22 +185,22 @@ class SupervisorProvider extends ChangeNotifier {
     _addLog(LogFilter.emergencyStop, '비상정지 실패 알림 닫음');
   }
 
-  void releaseEmergencyStop(AppSettings settings) {
+  void resetEmergencyStop(AppSettings settings) {
     if (_connectionState != RosConnectionState.connected) {
       _setEmergencyStopState(
         EmergencyStopState.releaseFailed,
-        'ROS Bridge에 연결되지 않아 비상정지를 해제하지 못했습니다.',
+        'ROS Bridge에 연결되지 않아 비상정지를 reset하지 못했습니다.',
       );
-      _addLog(LogFilter.emergencyStop, '비상정지 해제 실패: ROS 연결 안 됨');
+      _addLog(LogFilter.emergencyStop, '비상정지 reset 실패: ROS 연결 안 됨');
       return;
     }
     _sendEmergencyCommand(
       settings: settings,
-      command: 'release',
+      command: 'reset',
       pendingState: EmergencyStopState.releasing,
       timeoutState: EmergencyStopState.releaseFailed,
-      pendingMessage: 'VICA에 비상정지 해제를 요청하고 있습니다.',
-      timeoutMessage: 'app_emergency_node의 비상정지 해제 응답이 없습니다.',
+      pendingMessage: 'VICA에 비상정지 reset을 요청하고 있습니다.',
+      timeoutMessage: 'app_emergency_node의 비상정지 reset 응답이 없습니다.',
     );
   }
 
@@ -208,7 +208,7 @@ class SupervisorProvider extends ChangeNotifier {
     if (_connectionState != RosConnectionState.connected) {
       await connect(settings);
     }
-    releaseEmergencyStop(settings);
+    resetEmergencyStop(settings);
   }
 
   void _sendEmergencyCommand({
@@ -233,7 +233,7 @@ class SupervisorProvider extends ChangeNotifier {
     );
     _addLog(
       LogFilter.emergencyStop,
-      command == 'activate' ? '비상정지 요청 전송' : '비상정지 해제 요청 전송',
+      command == 'activate' ? '비상정지 요청 전송' : '비상정지 reset 요청 전송',
     );
     _emergencyStopTimeoutTimer?.cancel();
     _emergencyStopTimeoutTimer = Timer(
@@ -448,18 +448,20 @@ class SupervisorProvider extends ChangeNotifier {
         return;
       }
       if (_emergencyStopState == EmergencyStopState.activationFailed &&
+          command != 'reset' &&
           command != 'release') {
         return;
       }
       if (_emergencyStopState == EmergencyStopState.releasing &&
           !matchesPending &&
+          command != 'reset' &&
           command != 'release') {
         return;
       }
       _clearEmergencyStopPending();
       _setEmergencyStopState(EmergencyStopState.inactive, '');
-      if (matchesPending || command == 'release') {
-        _addLog(LogFilter.emergencyStop, '비상정지 해제 완료');
+      if (matchesPending || command == 'reset' || command == 'release') {
+        _addLog(LogFilter.emergencyStop, '비상정지 reset 완료');
       }
       return;
     }
@@ -468,7 +470,8 @@ class SupervisorProvider extends ChangeNotifier {
       if (_pendingEmergencyRequestId != null && !matchesPending) {
         return;
       }
-      final failedState = command == 'release' ||
+      final failedState = command == 'reset' ||
+              command == 'release' ||
               _emergencyStopState == EmergencyStopState.releasing
           ? EmergencyStopState.releaseFailed
           : EmergencyStopState.activationFailed;

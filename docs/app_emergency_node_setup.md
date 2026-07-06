@@ -46,12 +46,15 @@ ros2 run vica_app_nodes app_emergency_node
 기본 연결은 다음과 같습니다.
 
 ```text
-Nav2 /cmd_vel_raw -> app_emergency_node -> /cmd_vel -> motor driver
+Nav2 /cmd_vel_raw -> app_emergency_node -> /cmd_vel -> keyboard_knob
+app_emergency_node -> /app_emergency_stop -> emergency_stop_node -> /emergency_stop
 ```
 
 Nav2 controller server의 속도 출력은 `/cmd_vel_raw`로 remap합니다.
 모터 드라이버가 기존 `/cmd_vel`을 계속 구독하도록 두면
-`app_emergency_node`의 출력만 모터로 전달됩니다.
+`app_emergency_node`의 출력만 모터로 전달됩니다. 앱 비상정지 입력은
+`/app_emergency_stop`으로 `emergency_stop_node`에 전달되고, 물리 버튼
+상태와 합쳐진 최종 `/emergency_stop`이 `keyboard_knob`을 래치시킵니다.
 
 현장 topic이 다르면 node parameter로 변경합니다.
 
@@ -59,6 +62,8 @@ Nav2 controller server의 속도 출력은 `/cmd_vel_raw`로 remap합니다.
 ros2 run vica_app_nodes app_emergency_node --ros-args \
   -p input_cmd_vel_topic:=/cmd_vel_raw \
   -p output_cmd_vel_topic:=/cmd_vel \
+  -p app_emergency_stop_topic:=/app_emergency_stop \
+  -p estop_reset_service:=/estop_reset \
   -p navigate_action_name:=/navigate_to_pose
 ```
 
@@ -69,6 +74,9 @@ ros2 node list
 ros2 node info /app_emergency_node
 ros2 topic info -v /cmd_vel_raw
 ros2 topic info -v /cmd_vel
+ros2 topic echo /app_emergency_stop
+ros2 topic echo /emergency_stop
+ros2 service type /estop_reset
 ros2 action info /navigate_to_pose
 ros2 topic echo /safety/emergency_stop_state
 ```
@@ -82,6 +90,9 @@ ros2 topic echo /safety/emergency_stop_state
 5. 앱과 VICA의 ROS Domain ID 및 네트워크 연결이 같은지 확인합니다.
 6. rosbridge가 `/safety/emergency_stop_request`와
    `/safety/emergency_stop_state`를 전달하는지 확인합니다.
+7. `emergency_stop_node`가 `/app_emergency_stop`을 구독하고 `/emergency_stop`을
+   발행하는지 확인합니다.
+8. `keyboard_knob`의 `/estop_reset` 서비스가 보이는지 확인합니다.
 
 ## 단계별 시험
 
@@ -90,16 +101,18 @@ ros2 topic echo /safety/emergency_stop_state
 1. 정지 상태에서 앱 버튼을 눌러 성공 팝업과 `active: true`를 확인합니다.
 2. 활성화 중 `/cmd_vel_raw`에 속도 명령을 넣어도 `/cmd_vel`이 계속 0인지 확인합니다.
 3. Nav2 주행 중 정지를 눌러 action goal이 canceled 상태가 되는지 확인합니다.
-4. 비상정지를 해제한 뒤 기존 목적지가 다시 시작되지 않는지 확인합니다.
-5. 해제 후 `/safety/emergency_stop_state`의 `motion_hold_active`가
+4. 앱의 reset 버튼을 누른 뒤 `/app_emergency_stop=false`와 `/estop_reset`
+   성공을 확인합니다.
+5. reset 후 기존 목적지가 다시 시작되지 않는지 확인합니다.
+6. reset 후 `/safety/emergency_stop_state`의 `motion_hold_active`가
    `true`이고 `/cmd_vel`이 계속 0인지 확인합니다.
-6. 새로운 목적지를 보낸 뒤에만 `motion_hold_active`가 `false`로 바뀌고
+7. 새로운 목적지를 보낸 뒤에만 `motion_hold_active`가 `false`로 바뀌고
    주행이 다시 시작되는지 확인합니다.
-7. `app_emergency_node`를 종료한 뒤 앱에서 정지를 눌러 실패 팝업과 재시도를 확인합니다.
-8. rosbridge 연결을 끊고 동일한 실패/재연결/재시도 흐름을 확인합니다.
-9. 앱을 종료했다 다시 열어도 node가 active이면 정지 팝업이 복구되는지 확인합니다.
-10. 해제 요청 중 연결을 끊으면 팝업이 유지되고 해제 재시도가 나타나는지 확인합니다.
-11. 배열 payload, 빈 `request_id`, 잘못된 `command`를 보내도 node가
+8. `app_emergency_node`를 종료한 뒤 앱에서 정지를 눌러 실패 팝업과 재시도를 확인합니다.
+9. rosbridge 연결을 끊고 동일한 실패/재연결/재시도 흐름을 확인합니다.
+10. 앱을 종료했다 다시 열어도 node가 active이면 정지 팝업이 복구되는지 확인합니다.
+11. reset 요청 중 연결을 끊으면 팝업이 유지되고 reset 재시도가 나타나는지 확인합니다.
+12. 배열 payload, 빈 `request_id`, 잘못된 `command`를 보내도 node가
     종료되지 않고 `/safety/emergency_stop_state`에 `state: failed`가
     발행되는지 확인합니다.
 

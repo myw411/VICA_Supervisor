@@ -17,7 +17,8 @@ from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import Twist
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
+from std_srvs.srv import Trigger
 
 
 class AppEmergencyNode(Node):
@@ -30,6 +31,8 @@ class AppEmergencyNode(Node):
         self.declare_parameter("state_topic", "/safety/emergency_stop_state")
         self.declare_parameter("input_cmd_vel_topic", "/cmd_vel_raw")
         self.declare_parameter("output_cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("app_emergency_stop_topic", "/app_emergency_stop")
+        self.declare_parameter("estop_reset_service", "/estop_reset")
         self.declare_parameter("navigate_action_name", "/navigate_to_pose")
         self.declare_parameter("control_period_sec", 0.05)
         self.declare_parameter("state_period_sec", 1.0)
@@ -42,6 +45,8 @@ class AppEmergencyNode(Node):
         state_topic = str(self.get_parameter("state_topic").value)
         input_topic = str(self.get_parameter("input_cmd_vel_topic").value)
         output_topic = str(self.get_parameter("output_cmd_vel_topic").value)
+        app_estop_topic = str(self.get_parameter("app_emergency_stop_topic").value)
+        estop_reset_service = str(self.get_parameter("estop_reset_service").value)
         action_name = str(self.get_parameter("navigate_action_name").value)
 
         self.emergency_active = False
@@ -50,6 +55,10 @@ class AppEmergencyNode(Node):
         self._cancel_in_flight = False
         self._cancel_response_received = False
         self._cancel_request_sent = False
+        self._reset_in_flight = False
+        self._estop_reset_done = False
+        self._reset_request_id = ""
+        self._reset_allowed_after_ns = 0
         self._navigation_status_received = False
         self._has_active_navigation_goal = False
         self._current_active_goal_ids = set()
@@ -66,6 +75,7 @@ class AppEmergencyNode(Node):
             10,
         )
         self.cmd_vel_publisher = self.create_publisher(Twist, output_topic, 10)
+        self.app_estop_publisher = self.create_publisher(Bool, app_estop_topic, 10)
 
         self.create_subscription(String, request_topic, self.handle_request, 10)
         self.create_subscription(Twist, input_topic, self.handle_cmd_vel, 10)
@@ -78,6 +88,7 @@ class AppEmergencyNode(Node):
 
         cancel_service = f"{action_name.rstrip('/')}/_action/cancel_goal"
         self.cancel_client = self.create_client(CancelGoal, cancel_service)
+        self.estop_reset_client = self.create_client(Trigger, estop_reset_service)
 
         control_period = float(self.get_parameter("control_period_sec").value)
         state_period = float(self.get_parameter("state_period_sec").value)
@@ -86,11 +97,12 @@ class AppEmergencyNode(Node):
 
         self.get_logger().info(
             "app_emergency_node ready: "
-            f"{input_topic} -> safety gate -> {output_topic}",
+            f"{input_topic} -> safety gate -> {output_topic}, "
+            f"app E-stop -> {app_estop_topic}",
         )
 
     def handle_request(self, msg: String) -> None:
-        """앱의 activate/release/query JSON 요청을 처리합니다."""
+        """앱의 activate/reset/query JSON 요청을 처리합니다."""
         try:
             payload = json.loads(msg.data)
         except (json.JSONDecodeError, TypeError):
@@ -114,8 +126,8 @@ class AppEmergencyNode(Node):
 
         if command == "activate":
             self.activate_emergency_stop(request_id)
-        elif command == "release":
-            self.release_emergency_stop(request_id)
+        elif command in {"reset", "release"}:
+            self.reset_emergency_stop(request_id)
         elif command == "query":
             self.publish_state(
                 state="active" if self.emergency_active else "inactive",
@@ -148,7 +160,7 @@ class AppEmergencyNode(Node):
         if not isinstance(raw_command, str) or not raw_command.strip():
             return request_id, "", "command는 비어 있지 않은 문자열이어야 합니다."
         command = raw_command.strip().lower()
-        if command not in {"activate", "release", "query"}:
+        if command not in {"activate", "reset", "release", "query"}:
             return request_id, command, f"지원하지 않는 비상정지 명령입니다: {command}"
 
         for field_name in ("source", "timestamp"):
@@ -169,9 +181,14 @@ class AppEmergencyNode(Node):
         self.navigation_cancelled = False
         self._cancel_response_received = False
         self._cancel_request_sent = False
+        self._reset_in_flight = False
+        self._estop_reset_done = False
+        self._reset_request_id = ""
+        self._reset_allowed_after_ns = 0
         self._navigation_status_received = False
         self._blocked_goal_ids = set(self._current_active_goal_ids)
         self._activation_request_id = request_id
+        self.publish_app_emergency_stop(True)
         self.publish_zero_velocity()
         self.publish_state(
             state="active",
@@ -182,35 +199,26 @@ class AppEmergencyNode(Node):
         self.try_cancel_navigation()
         self.get_logger().warn("Emergency stop activated by VICA Supervisor")
 
-    def release_emergency_stop(self, request_id: str) -> None:
-        """Nav2 goal 취소가 확인된 경우에만 비상정지 래치를 해제합니다."""
-        if self.emergency_active and not self.navigation_cancelled:
-            self.publish_state(
-                state="failed",
-                request_id=request_id,
-                command="release",
-                message="기존 목적지 취소가 아직 확인되지 않아 해제할 수 없습니다.",
-            )
-            self.try_cancel_navigation()
-            return
-
-        self.emergency_active = False
+    def reset_emergency_stop(self, request_id: str) -> None:
+        """앱 E-stop 입력을 내리고 모터 E-stop reset과 Nav2 goal 취소를 수행합니다."""
         self.hold_active = True
-        self._blocked_goal_ids.update(self._current_active_goal_ids)
-        now_ns = self.get_clock().now().nanoseconds
-        guard_sec = float(self.get_parameter("release_guard_sec").value)
-        self._release_guard_until_ns = now_ns + int(guard_sec * 1_000_000_000)
-        self._last_input_ns = 0
+        self._reset_request_id = request_id
+        self._estop_reset_done = False
+        self._reset_allowed_after_ns = (
+            self.get_clock().now().nanoseconds + 200_000_000
+        )
+        self.publish_app_emergency_stop(False)
         self.publish_zero_velocity()
+        if not self.navigation_cancelled:
+            self.try_cancel_navigation()
         self.publish_state(
-            state="inactive",
+            state="active",
             request_id=request_id,
-            command="release",
-            message="비상정지가 해제되었습니다. 새로운 목적지를 기다리는 HOLD 상태입니다.",
+            command="reset",
+            message="비상정지 reset을 요청했습니다. 모터 래치 해제와 기존 목적지 취소를 확인하고 있습니다.",
         )
-        self.get_logger().info(
-            "Emergency stop released; HOLD remains until a new Nav2 goal",
-        )
+        self.try_reset_estop_latch()
+        self.get_logger().info("Emergency stop reset requested by VICA Supervisor")
 
     def handle_cmd_vel(self, msg: Twist) -> None:
         """안전 범위의 새 속도 명령만 모터 드라이버 쪽으로 전달합니다."""
@@ -259,6 +267,9 @@ class AppEmergencyNode(Node):
             self.publish_zero_velocity()
             if self.emergency_active and not self.navigation_cancelled:
                 self.try_cancel_navigation()
+            if self._reset_request_id and not self._estop_reset_done:
+                self.publish_app_emergency_stop(False)
+                self.try_reset_estop_latch()
             return
 
         if now_ns < self._release_guard_until_ns:
@@ -392,6 +403,9 @@ class AppEmergencyNode(Node):
         self.navigation_cancelled = True
         self._cancel_request_sent = False
         self.publish_goal_event("goal_canceled", "비상정지로 기존 목적지 취소")
+        if self._reset_request_id and self._estop_reset_done:
+            self.complete_emergency_reset()
+            return
         self.publish_state(
             state="active",
             request_id=self._activation_request_id,
@@ -400,12 +414,96 @@ class AppEmergencyNode(Node):
         )
         self.get_logger().warn("All NavigateToPose goals were canceled")
 
+    def try_reset_estop_latch(self) -> None:
+        """keyboard_knob의 /estop_reset 서비스를 호출해 모터 E-stop 래치를 해제합니다."""
+        if self._reset_in_flight or self._estop_reset_done:
+            return
+        if self.get_clock().now().nanoseconds < self._reset_allowed_after_ns:
+            return
+        if not self.estop_reset_client.service_is_ready():
+            return
+
+        self._reset_in_flight = True
+        future = self.estop_reset_client.call_async(Trigger.Request())
+        future.add_done_callback(self.handle_estop_reset_result)
+
+    def handle_estop_reset_result(self, future: Any) -> None:
+        self._reset_in_flight = False
+        request_id = self._reset_request_id
+        try:
+            response = future.result()
+        except Exception as exc:  # ROS future exceptions vary by distribution.
+            self.publish_state(
+                state="failed",
+                request_id=request_id,
+                command="reset",
+                message=f"모터 비상정지 reset 서비스 호출 실패: {exc}",
+            )
+            return
+
+        if response is None or not response.success:
+            message = (
+                response.message
+                if response is not None and response.message
+                else "모터 비상정지 reset이 거부되었습니다."
+            )
+            self.publish_state(
+                state="failed",
+                request_id=request_id,
+                command="reset",
+                message=message,
+            )
+            return
+
+        self._estop_reset_done = True
+        if self.navigation_cancelled:
+            self.complete_emergency_reset()
+        else:
+            self.publish_state(
+                state="active",
+                request_id=request_id,
+                command="reset",
+                message="모터 비상정지 reset 완료. 기존 목적지 취소를 확인하고 있습니다.",
+            )
+
+    def complete_emergency_reset(self) -> None:
+        """모터 reset과 Nav2 취소가 모두 끝난 뒤 HOLD 상태로 전환합니다."""
+        request_id = self._reset_request_id
+        self.emergency_active = False
+        self.hold_active = True
+        self._reset_request_id = ""
+        self._reset_allowed_after_ns = 0
+        self._blocked_goal_ids.update(self._current_active_goal_ids)
+        now_ns = self.get_clock().now().nanoseconds
+        guard_sec = float(self.get_parameter("release_guard_sec").value)
+        self._release_guard_until_ns = now_ns + int(guard_sec * 1_000_000_000)
+        self._last_input_ns = 0
+        self.publish_app_emergency_stop(False)
+        self.publish_zero_velocity()
+        self.publish_state(
+            state="inactive",
+            request_id=request_id,
+            command="reset",
+            message="비상정지 reset이 완료되었습니다. 기존 목적지는 취소되었고 정지 HOLD 상태입니다.",
+        )
+        self.get_logger().info(
+            "Emergency stop reset complete; HOLD remains until a new Nav2 goal",
+        )
+
     def publish_zero_velocity(self) -> None:
         """모터 드라이버 입력 topic에 완전한 0 Twist를 발행합니다."""
         self.cmd_vel_publisher.publish(Twist())
 
+    def publish_app_emergency_stop(self, active: bool) -> None:
+        msg = Bool()
+        msg.data = active
+        self.app_estop_publisher.publish(msg)
+
     def publish_periodic_state(self) -> None:
         """앱 재연결 시에도 현재 비상정지 상태를 복구할 수 있게 상태를 반복 발행합니다."""
+        self.publish_app_emergency_stop(
+            self.emergency_active and not self._reset_request_id
+        )
         self.publish_state(
             state="active" if self.emergency_active else "inactive",
             request_id="",
@@ -416,8 +514,8 @@ class AppEmergencyNode(Node):
     def current_message(self) -> str:
         if not self.emergency_active:
             if self.hold_active:
-                return "비상정지가 해제되었으며 새로운 목적지를 기다리는 HOLD 상태입니다."
-            return "비상정지가 해제된 상태입니다."
+                return "비상정지가 reset되었으며 새로운 목적지를 기다리는 HOLD 상태입니다."
+            return "비상정지가 비활성 상태입니다."
         if self.navigation_cancelled:
             return "비상정지가 활성화되었고 기존 목적지가 취소되었습니다."
         return "비상정지는 활성화되었으며 기존 목적지 취소를 확인하고 있습니다."
