@@ -321,6 +321,9 @@ class SupervisorProvider extends ChangeNotifier {
     final payload = {
       'request_id': _uuid.v4(),
       ...draft.toJson(),
+      'yaw': _normalizeYawDegrees(
+        draft.yaw + settings.savedYawOffsetDegrees,
+      ),
       'storage_root': settings.locationStorageRoot,
       'timestamp': DateTime.now().toIso8601String(),
     };
@@ -331,6 +334,11 @@ class SupervisorProvider extends ChangeNotifier {
     _addLog(LogFilter.coordinateTransfer, '${draft.name} 장소 저장 요청 전송');
     _draftLocation = null;
     notifyListeners();
+  }
+
+  double _normalizeYawDegrees(double yaw) {
+    final normalized = yaw % 360.0;
+    return normalized < 0 ? normalized + 360.0 : normalized;
   }
 
   // 삭제 요청도 ROS2 저장 노드가 같은 storage_root에서 처리하도록 보냅니다.

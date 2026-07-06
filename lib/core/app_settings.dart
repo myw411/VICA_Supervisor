@@ -29,6 +29,7 @@ class AppSettings {
     this.xOffset = 0,
     this.yOffset = 0,
     this.yawOffset = 0,
+    this.savedYawOffsetDegrees = 10,
     this.mapScale = 1,
     this.flipMapY = true,
   });
@@ -53,6 +54,7 @@ class AppSettings {
   final double xOffset;
   final double yOffset;
   final double yawOffset;
+  final double savedYawOffsetDegrees;
   final double mapScale;
   final bool flipMapY;
 
@@ -77,6 +79,7 @@ class AppSettings {
     double? xOffset,
     double? yOffset,
     double? yawOffset,
+    double? savedYawOffsetDegrees,
     double? mapScale,
     bool? flipMapY,
   }) {
@@ -107,6 +110,8 @@ class AppSettings {
       xOffset: xOffset ?? this.xOffset,
       yOffset: yOffset ?? this.yOffset,
       yawOffset: yawOffset ?? this.yawOffset,
+      savedYawOffsetDegrees:
+          savedYawOffsetDegrees ?? this.savedYawOffsetDegrees,
       mapScale: mapScale ?? this.mapScale,
       flipMapY: flipMapY ?? this.flipMapY,
     );
@@ -134,6 +139,7 @@ class AppSettings {
       'xOffset': xOffset,
       'yOffset': yOffset,
       'yawOffset': yawOffset,
+      'savedYawOffsetDegrees': savedYawOffsetDegrees,
       'mapScale': mapScale,
       'flipMapY': flipMapY,
     };
@@ -178,6 +184,9 @@ class AppSettings {
       xOffset: (json['xOffset'] as num?)?.toDouble() ?? defaults.xOffset,
       yOffset: (json['yOffset'] as num?)?.toDouble() ?? defaults.yOffset,
       yawOffset: (json['yawOffset'] as num?)?.toDouble() ?? defaults.yawOffset,
+      savedYawOffsetDegrees:
+          (json['savedYawOffsetDegrees'] as num?)?.toDouble() ??
+              defaults.savedYawOffsetDegrees,
       mapScale: (json['mapScale'] as num?)?.toDouble() ?? defaults.mapScale,
       flipMapY: json['flipMapY'] as bool? ?? defaults.flipMapY,
     );

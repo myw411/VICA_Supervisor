@@ -37,7 +37,7 @@ class VicaSupervisorApp extends StatelessWidget {
           centerTitle: false,
           titleTextStyle: TextStyle(
             color: VicaColors.text,
-            fontSize: 26,
+            fontSize: 17,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -175,11 +175,6 @@ class _SupervisorShellState extends State<SupervisorShell> {
                   onPressed: () => setState(() => _index = 0),
                   icon: const Icon(Icons.home_outlined),
                   tooltip: '대시보드',
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _index = 2),
-                  icon: const Icon(Icons.map_outlined),
-                  tooltip: '지도별 장소 보기',
                 ),
                 IconButton(
                   onPressed: () => setState(() => _index = 6),
