@@ -25,12 +25,12 @@ from typing import Any
 
 import rclpy
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 
 @dataclass(frozen=True)
@@ -65,11 +65,22 @@ class VicaGotoGoal(Node):
     def __init__(self) -> None:
         super().__init__("vica_goto_goal")
 
+        self.declare_parameter("yaw_align_enabled", True)
+        self.declare_parameter("yaw_align_tolerance_deg", 5.0)
+        self.declare_parameter("yaw_align_max_attempts", 2)
+        self.declare_parameter("yaw_align_max_duration_sec", 4.0)
+        self.declare_parameter("yaw_align_angular_speed", 0.18)
+        self.declare_parameter("yaw_align_min_angular_speed", 0.08)
+        self.declare_parameter("yaw_align_slowdown_deg", 12.0)
+        self.declare_parameter("yaw_align_cmd_vel_topic", "/cmd_vel")
+
         # 장소 좌표는 지도별 locations.json에 저장되어 있습니다.
         self.storage_root = Path.home() / "ros2_ws" / "location"
 
         # Nav2 bt_navigator가 제공하는 NavigateToPose action server에 연결합니다.
         self.goal_client = ActionClient(self, NavigateToPose, "/navigate_to_pose")
+        self.latest_amcl_pose: PoseWithCovarianceStamped | None = None
+        self.emergency_stop_active = False
 
         # 목적지 요청/처리 결과를 다른 노드와 앱 로그가 볼 수 있게 JSON topic으로 내보냅니다.
         self.request_publisher = self.create_publisher(
@@ -78,6 +89,30 @@ class VicaGotoGoal(Node):
             10,
         )
         self.event_publisher = self.create_publisher(String, "/vica_goal_event", 10)
+        cmd_vel_topic = str(self.get_parameter("yaw_align_cmd_vel_topic").value)
+        self.cmd_vel_publisher = self.create_publisher(Twist, cmd_vel_topic, 10)
+
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            "/amcl_pose",
+            self.handle_amcl_pose,
+            10,
+        )
+        self.create_subscription(Bool, "/emergency_stop", self.handle_emergency_stop, 10)
+        self.create_subscription(
+            Bool,
+            "/app_emergency_stop",
+            self.handle_emergency_stop,
+            10,
+        )
+
+    def handle_amcl_pose(self, msg: PoseWithCovarianceStamped) -> None:
+        """목적지 도착 후 yaw-only 정렬에 사용할 현재 AMCL yaw를 저장합니다."""
+        self.latest_amcl_pose = msg
+
+    def handle_emergency_stop(self, msg: Bool) -> None:
+        """정렬 중 비상정지가 들어오면 즉시 cmd_vel을 멈출 수 있게 상태를 저장합니다."""
+        self.emergency_stop_active = bool(msg.data)
 
     def publish_destination_request(
         self,
@@ -177,6 +212,7 @@ class VicaGotoGoal(Node):
 
         status = int(result.status)
         if status == GoalStatus.STATUS_SUCCEEDED:
+            self.align_yaw_if_needed(location)
             self.publish_goal_event("goal_succeeded", location)
             self.get_logger().info(f"Goal succeeded: {location.name}")
             return True
@@ -193,6 +229,129 @@ class VicaGotoGoal(Node):
         self.publish_goal_event("goal_failed", location, f"Nav2 result status={status}")
         self.get_logger().warn(f"Goal finished with status={status}: {location.name}")
         return False
+
+    def align_yaw_if_needed(self, location: SavedLocation) -> None:
+        """Nav2 goal 성공 후 yaw 오차가 클 때만 제자리 회전으로 최종 방향을 맞춥니다."""
+        if not bool(self.get_parameter("yaw_align_enabled").value):
+            return
+
+        tolerance = float(self.get_parameter("yaw_align_tolerance_deg").value)
+        max_attempts = int(self.get_parameter("yaw_align_max_attempts").value)
+        for attempt in range(1, max_attempts + 1):
+            current_yaw = self.current_yaw_degrees()
+            if current_yaw is None:
+                self.publish_goal_event(
+                    "yaw_align_skipped",
+                    location,
+                    "AMCL pose를 받지 못해 yaw 재정렬을 건너뜁니다.",
+                )
+                return
+
+            error = self.yaw_error_degrees(location.yaw, current_yaw)
+            if abs(error) < tolerance:
+                if attempt > 1:
+                    self.publish_goal_event(
+                        "yaw_align_succeeded",
+                        location,
+                        f"yaw 오차 {abs(error):.1f}도",
+                    )
+                return
+
+            self.publish_goal_event(
+                "yaw_align_started",
+                location,
+                f"yaw 오차 {abs(error):.1f}도, 재정렬 {attempt}/{max_attempts}",
+            )
+            self.get_logger().info(
+                f"Yaw align attempt {attempt}/{max_attempts}: "
+                f"target={location.yaw:.1f}, current={current_yaw:.1f}, error={error:.1f}",
+            )
+
+            if not self.align_yaw_once(location.yaw, tolerance):
+                break
+
+        self.stop_cmd_vel()
+        current_yaw = self.current_yaw_degrees()
+        if current_yaw is None:
+            return
+        error = self.yaw_error_degrees(location.yaw, current_yaw)
+        if abs(error) >= tolerance:
+            self.publish_goal_event(
+                "yaw_align_limit_reached",
+                location,
+                f"yaw 재정렬 2회 후 오차 {abs(error):.1f}도",
+            )
+
+    def align_yaw_once(self, target_yaw: float, tolerance: float) -> bool:
+        """linear.x는 0으로 두고 angular.z만 발행해 yaw 오차를 줄입니다."""
+        max_duration = float(self.get_parameter("yaw_align_max_duration_sec").value)
+        base_speed = abs(float(self.get_parameter("yaw_align_angular_speed").value))
+        min_speed = abs(float(self.get_parameter("yaw_align_min_angular_speed").value))
+        slowdown_deg = float(self.get_parameter("yaw_align_slowdown_deg").value)
+        start_ns = self.get_clock().now().nanoseconds
+        max_duration_ns = int(max_duration * 1_000_000_000)
+
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.02)
+            if self.emergency_stop_active:
+                self.stop_cmd_vel()
+                return False
+
+            current_yaw = self.current_yaw_degrees()
+            if current_yaw is None:
+                self.stop_cmd_vel()
+                return False
+
+            error = self.yaw_error_degrees(target_yaw, current_yaw)
+            if abs(error) < tolerance:
+                self.stop_cmd_vel()
+                return True
+
+            elapsed_ns = self.get_clock().now().nanoseconds - start_ns
+            if elapsed_ns >= max_duration_ns:
+                self.stop_cmd_vel()
+                return True
+
+            speed = base_speed
+            if abs(error) < slowdown_deg:
+                speed = max(min_speed, base_speed * abs(error) / slowdown_deg)
+            twist = Twist()
+            twist.angular.z = math.copysign(speed, error)
+            self.cmd_vel_publisher.publish(twist)
+
+        self.stop_cmd_vel()
+        return False
+
+    def stop_cmd_vel(self) -> None:
+        """정렬 종료/중단 시 모터 입력이 남지 않도록 0 속도를 여러 번 발행합니다."""
+        stop = Twist()
+        for _ in range(3):
+            self.cmd_vel_publisher.publish(stop)
+            rclpy.spin_once(self, timeout_sec=0.02)
+
+    def current_yaw_degrees(self) -> float | None:
+        if self.latest_amcl_pose is None:
+            rclpy.spin_once(self, timeout_sec=0.1)
+        if self.latest_amcl_pose is None:
+            return None
+        orientation = self.latest_amcl_pose.pose.pose.orientation
+        return self.quaternion_to_yaw_degrees(
+            orientation.x,
+            orientation.y,
+            orientation.z,
+            orientation.w,
+        )
+
+    @staticmethod
+    def quaternion_to_yaw_degrees(x: float, y: float, z: float, w: float) -> float:
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.degrees(math.atan2(siny_cosp, cosy_cosp)) % 360.0
+
+    @staticmethod
+    def yaw_error_degrees(target_yaw: float, current_yaw: float) -> float:
+        """target-current를 -180~180 범위로 정규화해 가장 짧은 회전 방향을 구합니다."""
+        return (target_yaw - current_yaw + 180.0) % 360.0 - 180.0
 
     def publish_goal_event(
         self,

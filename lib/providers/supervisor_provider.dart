@@ -25,6 +25,11 @@ enum EmergencyStopState {
 class SupervisorProvider extends ChangeNotifier {
   SupervisorProvider();
 
+  static const _nav2UnavailableReason = 'Nav2/AMCL 미실행';
+  static const _nav2UnavailableMessage =
+      'Nav2가 실행되지 않아 현재 위치와 주행 이벤트를 받을 수 없습니다.';
+  static const _nav2AvailableMessage = 'Nav2가 실행되었습니다.';
+
   final _uuid = const Uuid();
   RosBridgeClient? _client;
   RosConnectionState _connectionState = RosConnectionState.disconnected;
@@ -43,6 +48,9 @@ class SupervisorProvider extends ChangeNotifier {
   String _emergencyStopMessage = '';
   String? _pendingEmergencyRequestId;
   int _emergencyRetryGeneration = 0;
+  bool _nav2UnavailableNotified = false;
+  bool _nav2AvailableNotified = false;
+  bool _nav2WasUnavailable = false;
 
   RosConnectionState get connectionState => _connectionState;
   String get connectionDetail => _connectionDetail;
@@ -79,6 +87,7 @@ class SupervisorProvider extends ChangeNotifier {
   Future<void> connect(AppSettings settings) async {
     _reconnectTimer?.cancel();
     _reconnectAttempts = 0;
+    _resetNav2NotificationState();
     final oldClient = _client;
     _client = null;
     await oldClient?.close();
@@ -321,9 +330,7 @@ class SupervisorProvider extends ChangeNotifier {
     final payload = {
       'request_id': _uuid.v4(),
       ...draft.toJson(),
-      'yaw': _normalizeYawDegrees(
-        draft.yaw + settings.savedYawOffsetDegrees,
-      ),
+      'yaw': _normalizeYawDegrees(draft.yaw),
       'storage_root': settings.locationStorageRoot,
       'timestamp': DateTime.now().toIso8601String(),
     };
@@ -421,7 +428,33 @@ class SupervisorProvider extends ChangeNotifier {
       _addLog(
           LogFilter.emergencyStop, '${next.robotName}: ${next.errorReason}');
     }
+    _handleNav2StatusLog(next);
     notifyListeners();
+  }
+
+  void _handleNav2StatusLog(RobotStatus robot) {
+    final nav2Unavailable = robot.waitingReason == _nav2UnavailableReason;
+    if (nav2Unavailable) {
+      _nav2WasUnavailable = true;
+      if (!_nav2UnavailableNotified) {
+        _nav2UnavailableNotified = true;
+        _nav2AvailableNotified = false;
+        _addLog(LogFilter.connection, _nav2UnavailableMessage);
+      }
+      return;
+    }
+
+    if (_nav2WasUnavailable && !_nav2AvailableNotified) {
+      _nav2AvailableNotified = true;
+      _addLog(LogFilter.connection, _nav2AvailableMessage);
+    }
+    _nav2WasUnavailable = false;
+  }
+
+  void _resetNav2NotificationState() {
+    _nav2UnavailableNotified = false;
+    _nav2AvailableNotified = false;
+    _nav2WasUnavailable = false;
   }
 
   void _handleEmergencyStopState(Map<String, Object?> message) {

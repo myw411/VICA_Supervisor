@@ -29,7 +29,7 @@ class AppSettings {
     this.xOffset = 0,
     this.yOffset = 0,
     this.yawOffset = 0,
-    this.savedYawOffsetDegrees = 10,
+    this.savedYawOffsetDegrees = 0,
     this.mapScale = 1,
     this.flipMapY = true,
   });

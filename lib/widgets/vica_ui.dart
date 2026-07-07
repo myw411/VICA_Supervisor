@@ -181,7 +181,8 @@ class VicaRobotCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _IconBox(icon: Icons.smart_toy, color: VicaColors.primaryDark),
+            const _IconBox(
+                icon: Icons.smart_toy, color: VicaColors.primaryDark),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -197,20 +198,30 @@ class VicaRobotCard extends StatelessWidget {
                       ),
                       _Pill(
                         text: _statusLabel(robot.status),
-                        color: robot.hasError ? VicaColors.red : VicaColors.primary,
+                        color: robot.hasError
+                            ? VicaColors.red
+                            : VicaColors.primary,
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text('ID: ${robot.robotId}', style: Theme.of(context).textTheme.bodySmall),
+                  Text('ID: ${robot.robotId}',
+                      style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 14,
                     runSpacing: 8,
                     children: [
-                      _InfoChip(icon: Icons.location_on_outlined, text: '현재 위치: ${_empty(robot.currentLocation, '수신 대기')}'),
-                      _InfoChip(icon: Icons.flag_outlined, text: '목적지: ${_empty(robot.currentGoal, '없음')}'),
-                      _InfoChip(icon: Icons.schedule, text: '마지막 통신: ${_relativeTime(robot.timestamp)}'),
+                      _InfoChip(
+                          icon: Icons.location_on_outlined,
+                          text:
+                              '현재 위치: ${_empty(robot.currentLocation, '수신 대기')}'),
+                      _InfoChip(
+                          icon: Icons.flag_outlined,
+                          text: '목적지: ${_empty(robot.currentGoal, '없음')}'),
+                      _InfoChip(
+                          icon: Icons.schedule,
+                          text: '마지막 통신: ${_relativeTime(robot.timestamp)}'),
                     ],
                   ),
                 ],
@@ -235,24 +246,69 @@ class VicaLogTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final format = DateFormat('HH:mm');
     return VicaCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _IconBox(icon: Icons.info_outline, color: VicaColors.primaryDark),
-          const SizedBox(width: 16),
+          const _LogIconBox(
+              icon: Icons.info_outline, color: VicaColors.primaryDark),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(log.message, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(log.filter.label, style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  log.message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: VicaColors.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        height: 1.25,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  log.filter.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: VicaColors.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
+                ),
               ],
             ),
           ),
-          Text(format.format(log.createdAt), style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(width: 8),
+          Text(
+            format.format(log.createdAt),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: VicaColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _LogIconBox extends StatelessWidget {
+  const _LogIconBox({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: color, size: 18),
     );
   }
 }
@@ -318,7 +374,8 @@ class _Pill extends StatelessWidget {
   }
 }
 
-String _empty(String value, String fallback) => value.trim().isEmpty ? fallback : value;
+String _empty(String value, String fallback) =>
+    value.trim().isEmpty ? fallback : value;
 
 String _statusLabel(String status) {
   return switch (status) {

@@ -51,12 +51,13 @@ class VicaStatusAppNode(Node):
         super().__init__("vica_status_app_node")
 
         # 앱 표시값과 장소 판정 기준은 파라미터로 바꿀 수 있게 둡니다.
-        # 실행 시 --ros-args -p map_id:=... 같은 방식으로 덮어쓸 수 있습니다.
+        # map_id는 Nav2에 넘긴 map yaml 파일명에서만 계산합니다.
         self.declare_parameter("robot_id", "vica_01")
         self.declare_parameter("robot_name", "VICA-01")
-        self.declare_parameter("map_id", "vica_map_0604")
+        self.declare_parameter("map_yaml", "")
         self.declare_parameter("location_match_radius", 0.5)
         self.declare_parameter("publish_period_sec", 1.0)
+        self.declare_parameter("nav2_data_timeout_sec", 3.0)
         self.declare_parameter("moving_linear_threshold", 0.03)
         self.declare_parameter("moving_angular_threshold", 0.05)
 
@@ -72,9 +73,11 @@ class VicaStatusAppNode(Node):
         # diagnostics는 오류/대기 사유 문자열을 만들 때만 사용합니다.
         self.latest_diagnostics: DiagnosticArray | None = None
         self.last_odom_time: datetime | None = None
+        self.last_amcl_pose_time: datetime | None = None
 
         # vica_goto_goal이 목표를 보내면 /vica_goal_event로 목적지 이름이 들어옵니다.
         self.current_goal = ""
+        self.missing_map_yaml_warned = False
 
         # goal_sent/goal_accepted 이후에는 속도가 잠깐 0이어도 앱에 moving으로 유지합니다.
         self.navigation_active = False
@@ -116,6 +119,7 @@ class VicaStatusAppNode(Node):
     def handle_amcl_pose(self, msg: PoseWithCovarianceStamped) -> None:
         """AMCL의 map frame 위치를 받아 앱 지도 위 현재 위치 표시에 사용합니다."""
         self.latest_amcl_pose = msg
+        self.last_amcl_pose_time = datetime.now()
 
     def handle_diagnostics(self, msg: DiagnosticArray) -> None:
         """Nav2 diagnostic 메시지를 받아 오류/대기 사유 후보로 사용합니다."""
@@ -160,11 +164,22 @@ class VicaStatusAppNode(Node):
         이 함수는 timer로 주기 실행됩니다. callback들이 최신 값을 멤버 변수에 저장하고,
         이 함수가 그 값들을 조합해 앱이 바로 표시할 수 있는 JSON을 만듭니다.
         """
-        map_id = str(self.get_parameter("map_id").value)
+        map_id = self._current_map_id()
         x, y, yaw, linear_x, angular_z = self._read_odom_values()
+        nav2_pose_available = self._nav2_pose_available()
         error_reason = self._diagnostic_reason(min_level=2)
-        waiting_reason = self._waiting_reason(linear_x, angular_z, error_reason)
-        status = self._status(linear_x, angular_z, error_reason)
+        waiting_reason = self._waiting_reason(
+            linear_x,
+            angular_z,
+            error_reason,
+            nav2_pose_available,
+        )
+        status = self._status(
+            linear_x,
+            angular_z,
+            error_reason,
+            nav2_pose_available,
+        )
 
         payload: dict[str, Any] = {
             "robot_id": str(self.get_parameter("robot_id").value),
@@ -185,6 +200,19 @@ class VicaStatusAppNode(Node):
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.publisher.publish(msg)
 
+    def _current_map_id(self) -> str:
+        """Nav2에 넘긴 map yaml 경로에서 앱용 map_id를 정합니다."""
+        map_yaml = str(self.get_parameter("map_yaml").value).strip()
+        if map_yaml:
+            return Path(map_yaml).stem
+        if not self.missing_map_yaml_warned:
+            self.get_logger().warn(
+                "map_yaml parameter is required. "
+                "Run with: --ros-args -p map_yaml:=/path/to/map.yaml"
+            )
+            self.missing_map_yaml_warned = True
+        return ""
+
     def _read_odom_values(self) -> tuple[float, float, float, float, float]:
         """map frame 위치를 우선 사용하고, /odom은 속도와 fallback 위치에 사용합니다.
 
@@ -203,7 +231,7 @@ class VicaStatusAppNode(Node):
             linear_x = float(twist.linear.x)
             angular_z = float(twist.angular.z)
 
-        if self.latest_amcl_pose is not None:
+        if self._nav2_pose_available() and self.latest_amcl_pose is not None:
             pose = self.latest_amcl_pose.pose.pose
             yaw = self._quaternion_to_yaw_degrees(
                 pose.orientation.x,
@@ -237,6 +265,14 @@ class VicaStatusAppNode(Node):
             angular_z,
         )
 
+    def _nav2_pose_available(self) -> bool:
+        """AMCL pose가 최근에 들어왔는지로 Nav2 위치 추정 활성 상태를 판단합니다."""
+        if self.latest_amcl_pose is None or self.last_amcl_pose_time is None:
+            return False
+        timeout_sec = float(self.get_parameter("nav2_data_timeout_sec").value)
+        age = (datetime.now() - self.last_amcl_pose_time).total_seconds()
+        return age <= timeout_sec
+
     def _quaternion_to_yaw_degrees(
         self,
         x: float,
@@ -254,7 +290,13 @@ class VicaStatusAppNode(Node):
         yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp))
         return yaw % 360.0
 
-    def _status(self, linear_x: float, angular_z: float, error_reason: str) -> str:
+    def _status(
+        self,
+        linear_x: float,
+        angular_z: float,
+        error_reason: str,
+        nav2_pose_available: bool,
+    ) -> str:
         """오류가 있으면 error, 목표 주행 중이거나 속도가 있으면 moving으로 표시합니다.
 
         status 우선순위:
@@ -265,6 +307,8 @@ class VicaStatusAppNode(Node):
         """
         if error_reason:
             return "error"
+        if not nav2_pose_available:
+            return "waiting"
         if self.navigation_active:
             return "moving"
         if self._is_moving(linear_x, angular_z):
@@ -311,6 +355,7 @@ class VicaStatusAppNode(Node):
         linear_x: float,
         angular_z: float,
         error_reason: str,
+        nav2_pose_available: bool,
     ) -> str:
         """정지 상태일 때 앱에 표시할 대기 사유를 만듭니다.
 
@@ -319,6 +364,8 @@ class VicaStatusAppNode(Node):
         """
         if error_reason:
             return ""
+        if not nav2_pose_available:
+            return "Nav2/AMCL 미실행"
         if self.latest_odom is None:
             return "위치 데이터 수신 대기"
         if self.navigation_active:

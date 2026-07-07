@@ -219,6 +219,9 @@ class AppEmergencyNode(Node):
         self._last_cancel_attempt_ns = now_ns
 
         if not self.cancel_client.service_is_ready():
+            self.complete_navigation_cancellation(
+                "Nav2가 실행되지 않아 취소할 목적지가 없습니다."
+            )
             return
 
         self._cancel_in_flight = True
@@ -316,13 +319,16 @@ class AppEmergencyNode(Node):
 
         self.complete_navigation_cancellation()
 
-    def complete_navigation_cancellation(self) -> None:
+    def complete_navigation_cancellation(
+        self,
+        reason: str = "비상정지로 기존 목적지 취소",
+    ) -> None:
         """취소 승인 또는 활성 goal 없음이 확인되면 해제 가능한 상태로 전환합니다."""
         if self.navigation_cancelled:
             return
         self.navigation_cancelled = True
         self._cancel_request_sent = False
-        self.publish_goal_event("goal_canceled", "비상정지로 기존 목적지 취소")
+        self.publish_goal_event("goal_canceled", reason)
         if self._reset_request_id and self._estop_reset_done:
             self.complete_emergency_reset()
             return
