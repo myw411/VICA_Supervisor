@@ -66,7 +66,7 @@ class VicaGotoGoal(Node):
         super().__init__("vica_goto_goal")
 
         self.declare_parameter("yaw_align_enabled", True)
-        self.declare_parameter("yaw_align_tolerance_deg", 5.0)
+        self.declare_parameter("yaw_align_tolerance_deg", 3.0)
         self.declare_parameter("yaw_align_max_attempts", 2)
         self.declare_parameter("yaw_align_max_duration_sec", 4.0)
         self.declare_parameter("yaw_align_angular_speed", 0.18)

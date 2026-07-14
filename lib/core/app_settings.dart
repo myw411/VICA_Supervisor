@@ -5,12 +5,12 @@ import 'package:flutter/foundation.dart';
 class AppSettings {
   const AppSettings({
     // 기존 로컬 테스트 주소. 리눅스 데스크탑으로 동작 확인해 볼 때 사용
-    // this.rosBridgeUrl = 'ws://127.0.0.1:9090',
-    // this.mapHttpBaseUrl = 'http://127.0.0.1:8000',
+    this.rosBridgeUrl = 'ws://127.0.0.1:9090',
+    this.mapHttpBaseUrl = 'http://127.0.0.1:8000',
     //
     // Android 기기처럼 Jetson 밖에서 접속하는 실행 환경은 Jetson host IP를 사용합니다.
-    this.rosBridgeUrl = 'ws://192.168.0.10:9090',
-    this.mapHttpBaseUrl = 'http://192.168.0.10:8000',
+    // this.rosBridgeUrl = 'ws://192.168.0.10:9090',
+    // this.mapHttpBaseUrl = 'http://192.168.0.10:8000',
     this.locationStorageRoot = '~/ros2_ws/location',
     this.mapListRequestTopic = '/map_list_request',
     this.mapListTopic = '/map_list',
@@ -19,9 +19,10 @@ class AppSettings {
     this.saveLocationTopic = '/save_location',
     this.deleteLocationRequestTopic = '/delete_location_request',
     this.robotStatusTopic = '/robot_status',
-    this.emergencyStopRequestTopic = '/safety/emergency_stop_request',
-    this.emergencyStopStateTopic = '/safety/emergency_stop_state',
-    this.emergencyStopTimeoutSeconds = 2,
+    this.emergencyActivateService = '/app_estop_activate',
+    this.emergencyResetService = '/app_estop_reset',
+    this.emergencyStateTopic = '/app_estop_state',
+    this.emergencyServiceTimeoutSeconds = 8,
     this.maxLogs = 200,
     this.maxReconnectAttempts = 5,
     this.autoRequestMapList = true,
@@ -44,9 +45,10 @@ class AppSettings {
   final String saveLocationTopic;
   final String deleteLocationRequestTopic;
   final String robotStatusTopic;
-  final String emergencyStopRequestTopic;
-  final String emergencyStopStateTopic;
-  final int emergencyStopTimeoutSeconds;
+  final String emergencyActivateService;
+  final String emergencyResetService;
+  final String emergencyStateTopic;
+  final int emergencyServiceTimeoutSeconds;
   final int maxLogs;
   final int maxReconnectAttempts;
   final bool autoRequestMapList;
@@ -69,9 +71,10 @@ class AppSettings {
     String? saveLocationTopic,
     String? deleteLocationRequestTopic,
     String? robotStatusTopic,
-    String? emergencyStopRequestTopic,
-    String? emergencyStopStateTopic,
-    int? emergencyStopTimeoutSeconds,
+    String? emergencyActivateService,
+    String? emergencyResetService,
+    String? emergencyStateTopic,
+    int? emergencyServiceTimeoutSeconds,
     int? maxLogs,
     int? maxReconnectAttempts,
     bool? autoRequestMapList,
@@ -96,12 +99,13 @@ class AppSettings {
       deleteLocationRequestTopic:
           deleteLocationRequestTopic ?? this.deleteLocationRequestTopic,
       robotStatusTopic: robotStatusTopic ?? this.robotStatusTopic,
-      emergencyStopRequestTopic:
-          emergencyStopRequestTopic ?? this.emergencyStopRequestTopic,
-      emergencyStopStateTopic:
-          emergencyStopStateTopic ?? this.emergencyStopStateTopic,
-      emergencyStopTimeoutSeconds:
-          emergencyStopTimeoutSeconds ?? this.emergencyStopTimeoutSeconds,
+      emergencyActivateService:
+          emergencyActivateService ?? this.emergencyActivateService,
+      emergencyResetService:
+          emergencyResetService ?? this.emergencyResetService,
+      emergencyStateTopic: emergencyStateTopic ?? this.emergencyStateTopic,
+      emergencyServiceTimeoutSeconds:
+          emergencyServiceTimeoutSeconds ?? this.emergencyServiceTimeoutSeconds,
       maxLogs: maxLogs ?? this.maxLogs,
       maxReconnectAttempts: maxReconnectAttempts ?? this.maxReconnectAttempts,
       autoRequestMapList: autoRequestMapList ?? this.autoRequestMapList,
@@ -129,9 +133,10 @@ class AppSettings {
       'saveLocationTopic': saveLocationTopic,
       'deleteLocationRequestTopic': deleteLocationRequestTopic,
       'robotStatusTopic': robotStatusTopic,
-      'emergencyStopRequestTopic': emergencyStopRequestTopic,
-      'emergencyStopStateTopic': emergencyStopStateTopic,
-      'emergencyStopTimeoutSeconds': emergencyStopTimeoutSeconds,
+      'emergencyActivateService': emergencyActivateService,
+      'emergencyResetService': emergencyResetService,
+      'emergencyStateTopic': emergencyStateTopic,
+      'emergencyServiceTimeoutSeconds': emergencyServiceTimeoutSeconds,
       'maxLogs': maxLogs,
       'maxReconnectAttempts': maxReconnectAttempts,
       'autoRequestMapList': autoRequestMapList,
@@ -167,13 +172,15 @@ class AppSettings {
               defaults.deleteLocationRequestTopic,
       robotStatusTopic:
           json['robotStatusTopic'] as String? ?? defaults.robotStatusTopic,
-      emergencyStopRequestTopic: json['emergencyStopRequestTopic'] as String? ??
-          defaults.emergencyStopRequestTopic,
-      emergencyStopStateTopic: json['emergencyStopStateTopic'] as String? ??
-          defaults.emergencyStopStateTopic,
-      emergencyStopTimeoutSeconds:
-          (json['emergencyStopTimeoutSeconds'] as num?)?.toInt() ??
-              defaults.emergencyStopTimeoutSeconds,
+      emergencyActivateService: json['emergencyActivateService'] as String? ??
+          defaults.emergencyActivateService,
+      emergencyResetService: json['emergencyResetService'] as String? ??
+          defaults.emergencyResetService,
+      emergencyStateTopic: json['emergencyStateTopic'] as String? ??
+          defaults.emergencyStateTopic,
+      emergencyServiceTimeoutSeconds:
+          (json['emergencyServiceTimeoutSeconds'] as num?)?.toInt() ??
+              defaults.emergencyServiceTimeoutSeconds,
       maxLogs: json['maxLogs'] as int? ?? defaults.maxLogs,
       maxReconnectAttempts:
           json['maxReconnectAttempts'] as int? ?? defaults.maxReconnectAttempts,

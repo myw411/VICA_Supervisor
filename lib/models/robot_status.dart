@@ -9,7 +9,6 @@ class RobotStatus {
     required this.yaw,
     required this.currentLocation,
     required this.currentGoal,
-    required this.battery,
     required this.errorReason,
     required this.waitingReason,
     required this.mapId,
@@ -24,7 +23,6 @@ class RobotStatus {
   final double yaw;
   final String currentLocation;
   final String currentGoal;
-  final int battery;
   final String errorReason;
   final String waitingReason;
   final String mapId;
@@ -42,7 +40,6 @@ class RobotStatus {
       yaw: (json['yaw'] as num?)?.toDouble() ?? 0,
       currentLocation: json['current_location'] as String? ?? '',
       currentGoal: json['current_goal'] as String? ?? '',
-      battery: (json['battery'] as num?)?.toInt() ?? 0,
       errorReason: json['error_reason'] as String? ?? '',
       waitingReason: json['waiting_reason'] as String? ?? '',
       mapId: json['map_id'] as String? ?? '',
@@ -61,7 +58,6 @@ class RobotStatus {
       'yaw': yaw,
       'current_location': currentLocation,
       'current_goal': currentGoal,
-      'battery': battery,
       'error_reason': errorReason,
       'waiting_reason': waitingReason,
       'map_id': mapId,

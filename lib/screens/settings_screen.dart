@@ -104,15 +104,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: '장소 삭제 요청 topic'),
               _Field(controller: _c('robotStatusTopic'), label: '로봇 상태 topic'),
               _Field(
-                controller: _c('emergencyStopRequestTopic'),
-                label: '비상정지 요청 topic',
+                controller: _c('emergencyActivateService'),
+                label: '비상정지 활성화 service',
               ),
               _Field(
-                controller: _c('emergencyStopStateTopic'),
+                controller: _c('emergencyResetService'),
+                label: '비상정지 해제 service',
+              ),
+              _Field(
+                controller: _c('emergencyStateTopic'),
                 label: '비상정지 상태 topic',
               ),
               _Field(
-                controller: _c('emergencyStopTimeoutSeconds'),
+                controller: _c('emergencyServiceTimeoutSeconds'),
                 label: '비상정지 응답 제한시간(초)',
                 number: true,
               ),
@@ -159,10 +163,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'saveLocationTopic': settings.saveLocationTopic,
       'deleteLocationRequestTopic': settings.deleteLocationRequestTopic,
       'robotStatusTopic': settings.robotStatusTopic,
-      'emergencyStopRequestTopic': settings.emergencyStopRequestTopic,
-      'emergencyStopStateTopic': settings.emergencyStopStateTopic,
-      'emergencyStopTimeoutSeconds':
-          settings.emergencyStopTimeoutSeconds.toString(),
+      'emergencyActivateService': settings.emergencyActivateService,
+      'emergencyResetService': settings.emergencyResetService,
+      'emergencyStateTopic': settings.emergencyStateTopic,
+      'emergencyServiceTimeoutSeconds':
+          settings.emergencyServiceTimeoutSeconds.toString(),
       'xOffset': settings.xOffset.toString(),
       'yOffset': settings.yOffset.toString(),
       'yawOffset': settings.yawOffset.toString(),
@@ -192,10 +197,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       saveLocationTopic: _c('saveLocationTopic').text.trim(),
       deleteLocationRequestTopic: _c('deleteLocationRequestTopic').text.trim(),
       robotStatusTopic: _c('robotStatusTopic').text.trim(),
-      emergencyStopRequestTopic: _c('emergencyStopRequestTopic').text.trim(),
-      emergencyStopStateTopic: _c('emergencyStopStateTopic').text.trim(),
-      emergencyStopTimeoutSeconds:
-          int.tryParse(_c('emergencyStopTimeoutSeconds').text.trim()) ?? 2,
+      emergencyActivateService: _c('emergencyActivateService').text.trim(),
+      emergencyResetService: _c('emergencyResetService').text.trim(),
+      emergencyStateTopic: _c('emergencyStateTopic').text.trim(),
+      emergencyServiceTimeoutSeconds:
+          int.tryParse(_c('emergencyServiceTimeoutSeconds').text.trim()) ?? 8,
       xOffset: double.tryParse(_c('xOffset').text.trim()) ?? 0,
       yOffset: double.tryParse(_c('yOffset').text.trim()) ?? 0,
       yawOffset: double.tryParse(_c('yawOffset').text.trim()) ?? 0,

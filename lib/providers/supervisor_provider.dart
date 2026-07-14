@@ -29,6 +29,7 @@ class SupervisorProvider extends ChangeNotifier {
   static const _nav2UnavailableMessage =
       'Nav2가 실행되지 않아 현재 위치와 주행 이벤트를 받을 수 없습니다.';
   static const _nav2AvailableMessage = 'Nav2가 실행되었습니다.';
+  static const _noEventsRecordedReason = 'no events recorded';
 
   final _uuid = const Uuid();
   RosBridgeClient? _client;
@@ -43,14 +44,12 @@ class SupervisorProvider extends ChangeNotifier {
   LocationPoint? _draftLocation;
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
-  Timer? _emergencyStopTimeoutTimer;
   EmergencyStopState _emergencyStopState = EmergencyStopState.inactive;
   String _emergencyStopMessage = '';
-  String? _pendingEmergencyRequestId;
-  int _emergencyRetryGeneration = 0;
   bool _nav2UnavailableNotified = false;
   bool _nav2AvailableNotified = false;
   bool _nav2WasUnavailable = false;
+  bool _noEventsRecordedNotified = false;
 
   RosConnectionState get connectionState => _connectionState;
   String get connectionDetail => _connectionDetail;
@@ -147,14 +146,21 @@ class SupervisorProvider extends ChangeNotifier {
         handler: _handleRobotStatus,
       )
       ..subscribe(
-        topic: settings.emergencyStopStateTopic,
+        topic: settings.emergencyStateTopic,
         handler: _handleEmergencyStopState,
       );
-    _requestEmergencyStopState(settings);
   }
 
-  void activateEmergencyStop(AppSettings settings) {
-    if (_connectionState != RosConnectionState.connected) {
+  // 앱 비상정지 버튼: app_emergency_node의 activate 서비스를 호출합니다.
+  // 서비스 응답으로 성공/실패를 바로 판정하므로 request_id나 timeout 타이머가 필요없습니다.
+  Future<void> activateEmergencyStop(AppSettings settings) async {
+    if (_emergencyStopState == EmergencyStopState.activating ||
+        _emergencyStopState == EmergencyStopState.releasing) {
+      return;
+    }
+    final client = _client;
+    if (client == null ||
+        _connectionState != RosConnectionState.connected) {
       _setEmergencyStopState(
         EmergencyStopState.activationFailed,
         'ROS Bridge에 연결되지 않아 비상정지를 활성화하지 못했습니다.',
@@ -162,112 +168,110 @@ class SupervisorProvider extends ChangeNotifier {
       _addLog(LogFilter.emergencyStop, '비상정지 요청 실패: ROS 연결 안 됨');
       return;
     }
-    _sendEmergencyCommand(
-      settings: settings,
-      command: 'activate',
-      pendingState: EmergencyStopState.activating,
-      timeoutState: EmergencyStopState.activationFailed,
-      pendingMessage: 'VICA에 비상정지를 요청하고 있습니다.',
-      timeoutMessage: 'app_emergency_node의 비상정지 응답이 없습니다.',
+    _setEmergencyStopState(
+      EmergencyStopState.activating,
+      'VICA에 비상정지를 요청하고 있습니다.',
     );
+    _addLog(LogFilter.emergencyStop, '비상정지 요청 전송');
+    try {
+      final response = await client.callService(
+        service: settings.emergencyActivateService,
+        timeout: Duration(seconds: settings.emergencyServiceTimeoutSeconds),
+      );
+      if (response.result && response.success) {
+        _setEmergencyStopState(
+          EmergencyStopState.active,
+          response.message.isEmpty
+              ? '비상정지가 활성화되었습니다. 기존 목적지는 취소되었습니다.'
+              : response.message,
+        );
+        _addLog(LogFilter.emergencyStop, '비상정지 활성화 완료');
+      } else {
+        _setEmergencyStopState(
+          EmergencyStopState.activationFailed,
+          response.message.isEmpty ? '비상정지 요청을 처리하지 못했습니다.' : response.message,
+        );
+        _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
+      }
+    } catch (error) {
+      _setEmergencyStopState(
+        EmergencyStopState.activationFailed,
+        'app_emergency_node의 비상정지 응답이 없습니다: $error',
+      );
+      _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
+    }
   }
 
   Future<void> retryEmergencyStop(AppSettings settings) async {
-    final generation = ++_emergencyRetryGeneration;
     if (_connectionState != RosConnectionState.connected) {
       await connect(settings);
     }
-    if (generation != _emergencyRetryGeneration ||
-        _emergencyStopState != EmergencyStopState.activationFailed) {
+    if (_emergencyStopState != EmergencyStopState.activationFailed) {
       return;
     }
-    activateEmergencyStop(settings);
+    await activateEmergencyStop(settings);
   }
 
   void dismissEmergencyStopFailure() {
     if (_emergencyStopState != EmergencyStopState.activationFailed) {
       return;
     }
-    _emergencyRetryGeneration += 1;
-    _clearEmergencyStopPending();
     _setEmergencyStopState(EmergencyStopState.inactive, '');
     _addLog(LogFilter.emergencyStop, '비상정지 실패 알림 닫음');
   }
 
-  void resetEmergencyStop(AppSettings settings) {
-    if (_connectionState != RosConnectionState.connected) {
-      _setEmergencyStopState(
-        EmergencyStopState.releaseFailed,
-        'ROS Bridge에 연결되지 않아 비상정지를 reset하지 못했습니다.',
-      );
-      _addLog(LogFilter.emergencyStop, '비상정지 reset 실패: ROS 연결 안 됨');
+  // 비상정지 해제: app_emergency_node의 reset 서비스를 호출합니다.
+  // 노드가 /app_emergency_stop=false 전파 → Nav2 재취소 → /estop_reset 호출까지
+  // 마친 뒤 성공/실패를 돌려주므로, 성공이면 이후 정상 주행 명령이 그대로 반영됩니다.
+  Future<void> resetEmergencyStop(AppSettings settings) async {
+    if (_emergencyStopState == EmergencyStopState.releasing ||
+        _emergencyStopState == EmergencyStopState.activating) {
       return;
     }
-    _sendEmergencyCommand(
-      settings: settings,
-      command: 'reset',
-      pendingState: EmergencyStopState.releasing,
-      timeoutState: EmergencyStopState.releaseFailed,
-      pendingMessage: 'VICA에 비상정지 reset을 요청하고 있습니다.',
-      timeoutMessage: 'app_emergency_node의 비상정지 reset 응답이 없습니다.',
+    final client = _client;
+    if (client == null ||
+        _connectionState != RosConnectionState.connected) {
+      _setEmergencyStopState(
+        EmergencyStopState.releaseFailed,
+        'ROS Bridge에 연결되지 않아 비상정지를 해제하지 못했습니다.',
+      );
+      _addLog(LogFilter.emergencyStop, '비상정지 해제 실패: ROS 연결 안 됨');
+      return;
+    }
+    _setEmergencyStopState(
+      EmergencyStopState.releasing,
+      'VICA에 비상정지 해제를 요청하고 있습니다.',
     );
+    _addLog(LogFilter.emergencyStop, '비상정지 해제 요청 전송');
+    try {
+      final response = await client.callService(
+        service: settings.emergencyResetService,
+        timeout: Duration(seconds: settings.emergencyServiceTimeoutSeconds),
+      );
+      if (response.result && response.success) {
+        _setEmergencyStopState(EmergencyStopState.inactive, '');
+        _addLog(LogFilter.emergencyStop, '비상정지 해제 완료');
+      } else {
+        _setEmergencyStopState(
+          EmergencyStopState.releaseFailed,
+          response.message.isEmpty ? '비상정지 해제를 처리하지 못했습니다.' : response.message,
+        );
+        _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
+      }
+    } catch (error) {
+      _setEmergencyStopState(
+        EmergencyStopState.releaseFailed,
+        'app_emergency_node의 비상정지 해제 응답이 없습니다: $error',
+      );
+      _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
+    }
   }
 
   Future<void> retryEmergencyStopRelease(AppSettings settings) async {
     if (_connectionState != RosConnectionState.connected) {
       await connect(settings);
     }
-    resetEmergencyStop(settings);
-  }
-
-  void _sendEmergencyCommand({
-    required AppSettings settings,
-    required String command,
-    required EmergencyStopState pendingState,
-    required EmergencyStopState timeoutState,
-    required String pendingMessage,
-    required String timeoutMessage,
-  }) {
-    final requestId = _uuid.v4();
-    _pendingEmergencyRequestId = requestId;
-    _setEmergencyStopState(pendingState, pendingMessage);
-    _client?.publishJsonString(
-      topic: settings.emergencyStopRequestTopic,
-      payload: {
-        'request_id': requestId,
-        'command': command,
-        'source': 'vica_supervisor',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
-    _addLog(
-      LogFilter.emergencyStop,
-      command == 'activate' ? '비상정지 요청 전송' : '비상정지 reset 요청 전송',
-    );
-    _emergencyStopTimeoutTimer?.cancel();
-    _emergencyStopTimeoutTimer = Timer(
-      Duration(seconds: settings.emergencyStopTimeoutSeconds),
-      () {
-        if (_pendingEmergencyRequestId != requestId) {
-          return;
-        }
-        _pendingEmergencyRequestId = null;
-        _setEmergencyStopState(timeoutState, timeoutMessage);
-        _addLog(LogFilter.emergencyStop, timeoutMessage);
-      },
-    );
-  }
-
-  void _requestEmergencyStopState(AppSettings settings) {
-    _client?.publishJsonString(
-      topic: settings.emergencyStopRequestTopic,
-      payload: {
-        'request_id': _uuid.v4(),
-        'command': 'query',
-        'source': 'vica_supervisor',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
+    await resetEmergencyStop(settings);
   }
 
   void requestMapList(AppSettings settings) {
@@ -425,11 +429,22 @@ class SupervisorProvider extends ChangeNotifier {
     }
     _robotsById[next.robotId] = next;
     if (next.hasError) {
-      _addLog(
-          LogFilter.emergencyStop, '${next.robotName}: ${next.errorReason}');
+      final errorReason = next.errorReason.trim();
+      if (_isNoEventsRecorded(errorReason)) {
+        if (!_noEventsRecordedNotified) {
+          _noEventsRecordedNotified = true;
+          _addLog(LogFilter.connection, errorReason);
+        }
+      } else {
+        _addLog(LogFilter.emergencyStop, '${next.robotName}: $errorReason');
+      }
     }
     _handleNav2StatusLog(next);
     notifyListeners();
+  }
+
+  bool _isNoEventsRecorded(String message) {
+    return message.trim().toLowerCase() == _noEventsRecordedReason;
   }
 
   void _handleNav2StatusLog(RobotStatus robot) {
@@ -455,82 +470,40 @@ class SupervisorProvider extends ChangeNotifier {
     _nav2UnavailableNotified = false;
     _nav2AvailableNotified = false;
     _nav2WasUnavailable = false;
+    _noEventsRecordedNotified = false;
   }
 
+  // /app_estop_state 주기 브로드캐스트로 오버레이 상태를 노드 실제 상태에 맞춥니다.
+  // 앱이 비상정지 중에 재접속하면 이 토픽으로 활성 오버레이를 복구합니다.
   void _handleEmergencyStopState(Map<String, Object?> message) {
-    final state = message['state'] as String? ?? '';
-    final requestId = message['request_id'] as String? ?? '';
-    final command = message['command'] as String? ?? '';
-    final responseMessage = message['message'] as String? ?? '';
-    final matchesPending =
-        requestId.isNotEmpty && requestId == _pendingEmergencyRequestId;
+    final active = message['active'] == true;
+    final stateMessage = message['message'] as String? ?? '';
 
-    if (state == 'active') {
-      if (_emergencyStopState == EmergencyStopState.releaseFailed &&
-          command == 'status' &&
-          !matchesPending) {
-        return;
-      }
-      _clearEmergencyStopPending();
-      _setEmergencyStopState(
-        EmergencyStopState.active,
-        responseMessage.isEmpty
-            ? '비상정지가 활성화되었습니다. 기존 목적지는 취소되었습니다.'
-            : responseMessage,
-      );
-      if (matchesPending || command == 'activate') {
-        _addLog(LogFilter.emergencyStop, '비상정지 활성화 완료');
+    // 서비스 호출이 진행 중일 때는 그 응답이 상태를 결정하므로 브로드캐스트는 무시합니다.
+    if (_emergencyStopState == EmergencyStopState.activating ||
+        _emergencyStopState == EmergencyStopState.releasing) {
+      return;
+    }
+
+    if (active) {
+      // 노드가 활성이라고 알리면(정지가 유지되는 안전한 사실) 활성 오버레이로 맞춥니다.
+      if (_emergencyStopState != EmergencyStopState.active) {
+        _setEmergencyStopState(
+          EmergencyStopState.active,
+          stateMessage.isEmpty ? '비상정지가 활성화되어 있습니다.' : stateMessage,
+        );
       }
       return;
     }
 
-    if (state == 'inactive' || state == 'released') {
-      if (_emergencyStopState == EmergencyStopState.activating) {
-        return;
-      }
-      if (_emergencyStopState == EmergencyStopState.activationFailed &&
-          command != 'reset' &&
-          command != 'release') {
-        return;
-      }
-      if (_emergencyStopState == EmergencyStopState.releasing &&
-          !matchesPending &&
-          command != 'reset' &&
-          command != 'release') {
-        return;
-      }
-      _clearEmergencyStopPending();
+    // 노드가 비활성이라고 알릴 때: 실패 알림은 사용자가 닫기 전까지 유지합니다.
+    if (_emergencyStopState == EmergencyStopState.activationFailed ||
+        _emergencyStopState == EmergencyStopState.releaseFailed) {
+      return;
+    }
+    if (_emergencyStopState != EmergencyStopState.inactive) {
       _setEmergencyStopState(EmergencyStopState.inactive, '');
-      if (matchesPending || command == 'reset' || command == 'release') {
-        _addLog(LogFilter.emergencyStop, '비상정지 reset 완료');
-      }
-      return;
     }
-
-    if (state == 'failed') {
-      if (_pendingEmergencyRequestId != null && !matchesPending) {
-        return;
-      }
-      final failedState = command == 'reset' ||
-              command == 'release' ||
-              _emergencyStopState == EmergencyStopState.releasing
-          ? EmergencyStopState.releaseFailed
-          : EmergencyStopState.activationFailed;
-      _clearEmergencyStopPending();
-      _setEmergencyStopState(
-        failedState,
-        responseMessage.isEmpty
-            ? 'app_emergency_node가 요청을 처리하지 못했습니다.'
-            : responseMessage,
-      );
-      _addLog(LogFilter.emergencyStop, _emergencyStopMessage);
-    }
-  }
-
-  void _clearEmergencyStopPending() {
-    _emergencyStopTimeoutTimer?.cancel();
-    _emergencyStopTimeoutTimer = null;
-    _pendingEmergencyRequestId = null;
   }
 
   void _setEmergencyStopState(
@@ -576,7 +549,6 @@ class SupervisorProvider extends ChangeNotifier {
   @override
   void dispose() {
     _reconnectTimer?.cancel();
-    _emergencyStopTimeoutTimer?.cancel();
     unawaited(_client?.close());
     super.dispose();
   }

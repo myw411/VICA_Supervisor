@@ -14,11 +14,25 @@ enum RosConnectionState {
 typedef RosTopicHandler = void Function(Map<String, Object?> message);
 typedef RosStateHandler = void Function(RosConnectionState state, String detail);
 
+// rosbridge call_service 응답. result=false 이면 서비스 호출 자체가 실패한 것이고,
+// values 에는 서비스가 돌려준 필드(std_srvs/Trigger 라면 success, message)가 담긴다.
+class RosServiceResponse {
+  const RosServiceResponse({required this.result, required this.values});
+
+  final bool result;
+  final Map<String, Object?> values;
+
+  bool get success => values['success'] == true;
+  String get message => values['message'] as String? ?? '';
+}
+
 class RosBridgeClient {
   RosBridgeClient({required this.onState});
 
   final RosStateHandler onState;
   final Map<String, RosTopicHandler> _handlers = {};
+  final Map<String, Completer<RosServiceResponse>> _pendingServiceCalls = {};
+  int _serviceCallCounter = 0;
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   RosConnectionState _state = RosConnectionState.disconnected;
@@ -47,6 +61,7 @@ class RosBridgeClient {
 
   // 화면이나 앱이 연결을 해제할 때 subscription과 channel을 함께 정리합니다.
   Future<void> close() async {
+    _failPendingServiceCalls();
     await _subscription?.cancel();
     _subscription = null;
     await _channel?.sink.close();
@@ -92,6 +107,36 @@ class RosBridgeClient {
     });
   }
 
+  // rosbridge call_service 로 서비스를 호출하고 응답을 Future 로 돌려줍니다.
+  // 채널이 없거나 timeout 이면 예외를 던집니다.
+  Future<RosServiceResponse> callService({
+    required String service,
+    String type = 'std_srvs/Trigger',
+    Map<String, Object?> args = const {},
+    Duration timeout = const Duration(seconds: 5),
+  }) {
+    if (_channel == null) {
+      return Future.error(StateError('ROS Bridge에 연결되지 않았습니다.'));
+    }
+    final id = 'call_${_serviceCallCounter++}';
+    final completer = Completer<RosServiceResponse>();
+    _pendingServiceCalls[id] = completer;
+    _send({
+      'op': 'call_service',
+      'id': id,
+      'service': service,
+      'type': type,
+      'args': args,
+    });
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        _pendingServiceCalls.remove(id);
+        throw TimeoutException('서비스 응답 시간 초과: $service', timeout);
+      },
+    );
+  }
+
   void _send(Map<String, Object?> command) {
     if (_channel == null) {
       return;
@@ -102,6 +147,12 @@ class RosBridgeClient {
   void _handleRawMessage(dynamic raw) {
     try {
       final decoded = jsonDecode(raw as String) as Map<String, Object?>;
+
+      if (decoded['op'] == 'service_response') {
+        _handleServiceResponse(decoded);
+        return;
+      }
+
       final topic = decoded['topic'] as String?;
       final msg = decoded['msg'];
       final handler = topic == null ? null : _handlers[topic];
@@ -119,6 +170,39 @@ class RosBridgeClient {
       handler(payload);
     } catch (error) {
       onState(RosConnectionState.connected, 'ROS 메시지 파싱 무시: $error');
+    }
+  }
+
+  void _handleServiceResponse(Map<String, Object?> decoded) {
+    final id = decoded['id'] as String?;
+    if (id == null) {
+      return;
+    }
+    final completer = _pendingServiceCalls.remove(id);
+    if (completer == null || completer.isCompleted) {
+      return;
+    }
+    final rawValues = decoded['values'];
+    final values =
+        rawValues is Map<String, Object?> ? rawValues : <String, Object?>{};
+    completer.complete(
+      RosServiceResponse(
+        result: decoded['result'] == true,
+        values: values,
+      ),
+    );
+  }
+
+  void _failPendingServiceCalls() {
+    if (_pendingServiceCalls.isEmpty) {
+      return;
+    }
+    final pending = Map.of(_pendingServiceCalls);
+    _pendingServiceCalls.clear();
+    for (final completer in pending.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('ROS 연결이 종료되었습니다.'));
+      }
     }
   }
 

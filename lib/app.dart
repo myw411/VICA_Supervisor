@@ -147,26 +147,26 @@ class _SupervisorShellState extends State<SupervisorShell> {
               ),
               actions: [
                 Padding(
-                  padding: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.only(right: 12),
                   child: Tooltip(
                     message: '비상정지',
-                    child: SizedBox.square(
-                      dimension: 34,
-                      child: Material(
-                        color: Colors.red.shade700,
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () =>
-                              supervisor.activateEmergencyStop(settings),
-                          child: const Center(
-                            child: Icon(
-                              Icons.warning_rounded,
-                              color: Colors.white,
-                              size: 19,
-                            ),
-                          ),
+                    child: FilledButton.icon(
+                      onPressed: supervisor.emergencyOverlayVisible
+                          ? null
+                          : () => supervisor.activateEmergencyStop(settings),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
                         ),
+                      ),
+                      icon: const Icon(Icons.warning_rounded, size: 18),
+                      label: const Text(
+                        '비상정지',
+                        style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ),
                   ),
@@ -259,10 +259,10 @@ class _EmergencyStopOverlay extends StatelessWidget {
         state == EmergencyStopState.releaseFailed;
     final title = switch (state) {
       EmergencyStopState.activating => '비상정지 요청 중',
-      EmergencyStopState.active => '비상정지 활성화',
-      EmergencyStopState.releasing => '비상정지 reset 중',
+      EmergencyStopState.active => '비상정지 활성화됨',
+      EmergencyStopState.releasing => '비상정지 해제 중',
       EmergencyStopState.activationFailed => '비상정지 활성화 실패',
-      EmergencyStopState.releaseFailed => '비상정지 reset 실패',
+      EmergencyStopState.releaseFailed => '비상정지 해제 실패',
       EmergencyStopState.inactive => '',
     };
 
@@ -367,8 +367,8 @@ class _EmergencyStopOverlay extends StatelessWidget {
 
   String _actionLabel(EmergencyStopState state) {
     return switch (state) {
-      EmergencyStopState.active => 'reset',
-      EmergencyStopState.releaseFailed => 'reset 다시 시도',
+      EmergencyStopState.active => '비상정지 해제',
+      EmergencyStopState.releaseFailed => '해제 다시 시도',
       EmergencyStopState.activationFailed => '비상정지 다시 시도',
       _ => '',
     };

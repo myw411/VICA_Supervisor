@@ -122,7 +122,6 @@ class DashboardScreen extends StatelessWidget {
       yaw: 0,
       currentLocation: '수신 대기',
       currentGoal: '없음',
-      battery: 0,
       errorReason: '',
       waitingReason: '로봇 상태 메시지 수신 대기',
       mapId: '',
