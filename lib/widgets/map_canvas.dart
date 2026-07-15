@@ -7,6 +7,43 @@ import '../models/location_point.dart';
 import '../models/robot_status.dart';
 import '../models/vica_map.dart';
 
+class ResponsiveMapFrame extends StatelessWidget {
+  const ResponsiveMapFrame({
+    super.key,
+    required this.map,
+    required this.child,
+    this.minHeight = 280,
+    this.maxHeight = 680,
+  });
+
+  final VicaMap? map;
+  final Widget child;
+  final double minHeight;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mapWidth = map?.width.toDouble() ?? 4;
+        final mapHeight = map?.height.toDouble() ?? 3;
+        final aspectRatio =
+            mapWidth > 0 && mapHeight > 0 ? mapWidth / mapHeight : 4 / 3;
+        final preferredHeight = constraints.maxWidth / aspectRatio;
+        final height = preferredHeight.clamp(minHeight, maxHeight).toDouble();
+
+        return SizedBox(
+          height: height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
 class MapCanvas extends StatelessWidget {
   const MapCanvas({
     super.key,
@@ -35,7 +72,8 @@ class MapCanvas extends StatelessWidget {
       return map.imageUrl;
     }
     final base = settings.mapHttpBaseUrl.replaceAll(RegExp(r'/$'), '');
-    final path = map.imageUrl.startsWith('/') ? map.imageUrl : '/${map.imageUrl}';
+    final path =
+        map.imageUrl.startsWith('/') ? map.imageUrl : '/${map.imageUrl}';
     return '$base$path';
   }
 
@@ -94,11 +132,13 @@ class MapCanvas extends StatelessWidget {
                     ...locations.map(
                       (location) => selectedLocationId == location.locationId
                           ? _SelectedLocationMarker(
-                              offset: _scaledOffset(location.x, location.y, scale),
+                              offset:
+                                  _scaledOffset(location.x, location.y, scale),
                               label: location.name,
                             )
                           : _Marker(
-                              offset: _scaledOffset(location.x, location.y, scale),
+                              offset:
+                                  _scaledOffset(location.x, location.y, scale),
                               label: location.name,
                               color: Colors.blue,
                               size: 7,
@@ -135,7 +175,8 @@ class MapCanvas extends StatelessWidget {
   }
 
   // 지도 이미지가 화면 안에 들어오도록 초기 표시 크기를 계산합니다.
-  double _fitScale(double maxWidth, double maxHeight, double width, double height) {
+  double _fitScale(
+      double maxWidth, double maxHeight, double width, double height) {
     if (maxWidth.isInfinite || maxHeight.isInfinite) {
       return 1;
     }

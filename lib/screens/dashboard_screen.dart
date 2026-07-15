@@ -11,8 +11,8 @@ import '../widgets/vica_ui.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  static const double metricLabelFontSize = 16;
-  static const double errorMetricLabelFontSize = 13;
+  static const double metricLabelFontSize = 14;
+  static const double errorMetricLabelFontSize = 12;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +25,37 @@ class DashboardScreen extends StatelessWidget {
     final errors = robots.where((robot) => robot.hasError).length;
     final waiting = robots.where((robot) => robot.status != 'moving').length;
     final robot = supervisor.primaryRobot ?? _waitingRobot();
+    final metricCards = [
+      VicaMetricCard(
+        icon: Icons.smart_toy,
+        label: '전체 로봇',
+        value: robots.length.toString(),
+        color: VicaColors.primaryDark,
+        labelFontSize: metricLabelFontSize,
+      ),
+      VicaMetricCard(
+        icon: Icons.navigation,
+        label: '운행 중',
+        value: moving.toString(),
+        color: VicaColors.green,
+        labelFontSize: metricLabelFontSize,
+      ),
+      VicaMetricCard(
+        icon: Icons.hourglass_empty,
+        label: '대기 중',
+        value: waiting.toString(),
+        color: Colors.blueAccent,
+        labelFontSize: metricLabelFontSize,
+      ),
+      VicaMetricCard(
+        icon: Icons.warning,
+        label: '오류/긴급 정지',
+        value: errors.toString(),
+        color: VicaColors.red,
+        labelMaxLines: 2,
+        labelFontSize: errorMetricLabelFontSize,
+      ),
+    ];
 
     return VicaPage(
       title: '로봇 현황',
@@ -61,45 +92,28 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 18),
-        GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 4,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.7,
-          children: [
-            VicaMetricCard(
-              icon: Icons.smart_toy,
-              label: '전체\n로봇',
-              value: robots.length.toString(),
-              color: VicaColors.primaryDark,
-              labelMaxLines: 2,
-              labelFontSize: metricLabelFontSize,
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1040),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final columnCount = constraints.maxWidth >= 720 ? 4 : 2;
+                return GridView.builder(
+                  itemCount: metricCards.length,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columnCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 4,
+                    mainAxisExtent: 116,
+                  ),
+                  itemBuilder: (context, index) => metricCards[index],
+                );
+              },
             ),
-            VicaMetricCard(
-              icon: Icons.navigation,
-              label: '운행 중',
-              value: moving.toString(),
-              color: VicaColors.green,
-              labelFontSize: metricLabelFontSize,
-            ),
-            VicaMetricCard(
-              icon: Icons.hourglass_empty,
-              label: '대기 중',
-              value: waiting.toString(),
-              color: Colors.blueAccent,
-              labelFontSize: metricLabelFontSize,
-            ),
-            VicaMetricCard(
-              icon: Icons.warning,
-              label: '오류/\n긴급 정지',
-              value: errors.toString(),
-              color: VicaColors.red,
-              labelMaxLines: 2,
-              labelFontSize: errorMetricLabelFontSize,
-            ),
-          ],
+          ),
         ),
         const VicaSectionTitle('로봇 상태'),
         VicaRobotCard(robot: robot),

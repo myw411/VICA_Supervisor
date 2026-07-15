@@ -114,21 +114,18 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
         if (map == null)
           const VicaCard(child: Text('지도 목록을 먼저 불러오세요.'))
         else ...[
-          SizedBox(
-            height: 390,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: MapCanvas(
-                map: map,
-                settings: settings,
-                locations: locations,
-                draftLocation: previewLocation,
-                onTapMap: (ros) {
-                  supervisor.setDraftLocation(null);
-                  setState(() => _pickedRos = ros);
-                  _showLocationInfoSheet(context, supervisor, map.mapId);
-                },
-              ),
+          ResponsiveMapFrame(
+            map: map,
+            child: MapCanvas(
+              map: map,
+              settings: settings,
+              locations: locations,
+              draftLocation: previewLocation,
+              onTapMap: (ros) {
+                supervisor.setDraftLocation(null);
+                setState(() => _pickedRos = ros);
+                _showLocationInfoSheet(context, supervisor, map.mapId);
+              },
             ),
           ),
           const SizedBox(height: 20),

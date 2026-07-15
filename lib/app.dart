@@ -1,14 +1,17 @@
-// 이 파일은 앱 테마, 상단 구조, 하단 NavigationBar 탭 구성을 담당합니다.
+// 이 파일은 앱 테마, 로그인 분기, 화면 크기별 Navigation 구성을 담당합니다.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/app_settings.dart';
+import 'providers/auth_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/supervisor_provider.dart';
+import 'providers/ui_preferences_provider.dart';
 import 'widgets/vica_ui.dart';
 import 'screens/current_location_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/logs_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/map_locations_screen.dart';
 import 'screens/robot_management_screen.dart';
 import 'screens/save_location_screen.dart';
@@ -92,8 +95,18 @@ class VicaSupervisorApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const SupervisorShell(),
+      home: const AuthGate(),
     );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
+    return isLoggedIn ? const SupervisorShell() : const LoginScreen();
   }
 }
 
@@ -131,114 +144,478 @@ class _SupervisorShellState extends State<SupervisorShell> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>().settings;
     final supervisor = context.watch<SupervisorProvider>();
+    final sidebarExpanded =
+        context.watch<UiPreferencesProvider>().sidebarExpanded;
+    final username = context.watch<AuthProvider>().currentUsername ?? '';
 
-    return PopScope(
-      canPop: !supervisor.emergencyOverlayVisible,
-      child: Stack(
-        children: [
-          Scaffold(
-            appBar: AppBar(
-              title: Text(_titles[_index]),
-              leading: Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
-              ),
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Tooltip(
-                    message: '비상정지',
-                    child: FilledButton.icon(
-                      onPressed: supervisor.emergencyOverlayVisible
-                          ? null
-                          : () => supervisor.activateEmergencyStop(settings),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(0, 36),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useNavigationRail = constraints.maxWidth >= 900;
+
+        return PopScope(
+          canPop: !supervisor.emergencyOverlayVisible,
+          child: Stack(
+            children: [
+              Scaffold(
+                appBar: AppBar(
+                  title: Text(_titles[_index]),
+                  leading: useNavigationRail
+                      ? null
+                      : Builder(
+                          builder: (context) => IconButton(
+                            icon: const Icon(Icons.menu),
+                            onPressed: () => Scaffold.of(context).openDrawer(),
+                          ),
+                        ),
+                  actions: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Tooltip(
+                        message: '비상정지',
+                        child: FilledButton.icon(
+                          onPressed: supervisor.emergencyOverlayVisible
+                              ? null
+                              : () =>
+                                  supervisor.activateEmergencyStop(settings),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.red.shade700,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          icon: const Icon(Icons.warning_rounded, size: 18),
+                          label: const Text(
+                            '비상정지',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
                         ),
                       ),
-                      icon: const Icon(Icons.warning_rounded, size: 18),
-                      label: const Text(
-                        '비상정지',
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    if (useNavigationRail) ...[
+                      IconButton(
+                        onPressed: () => setState(() => _index = 0),
+                        icon: const Icon(Icons.home_outlined),
+                        tooltip: '대시보드',
                       ),
+                      IconButton(
+                        onPressed: () => setState(() => _index = 6),
+                        icon: const Icon(Icons.settings_outlined),
+                        tooltip: '설정',
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                  ],
+                ),
+                drawer:
+                    useNavigationRail ? null : _buildNavigationDrawer(username),
+                body: SafeArea(
+                  child: useNavigationRail
+                      ? Row(
+                          children: [
+                            _buildDesktopSidebar(
+                              expanded: sidebarExpanded,
+                              username: username,
+                            ),
+                            const VerticalDivider(width: 1),
+                            Expanded(child: _screens[_index]),
+                          ],
+                        )
+                      : _screens[_index],
+                ),
+              ),
+              if (supervisor.emergencyOverlayVisible)
+                Positioned.fill(
+                  child: _EmergencyStopOverlay(
+                    settings: settings,
+                    supervisor: supervisor,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Drawer _buildNavigationDrawer(String username) {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: NavigationDrawer(
+                selectedIndex: _index,
+                onDestinationSelected: (value) {
+                  Navigator.of(context).pop();
+                  setState(() => _index = value);
+                },
+                children: const [
+                  SizedBox(height: 20),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(28, 16, 16, 10),
+                    child: Text(
+                      'VICA',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  ..._navigationDrawerDestinations,
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: VicaColors.softBlue,
+                child: Text(
+                  _usernameInitial(username),
+                  style: const TextStyle(
+                    color: VicaColors.primaryDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              title: Text(
+                username,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(Icons.logout),
+              title: const Text('로그아웃'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _confirmLogout();
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopSidebar({
+    required bool expanded,
+    required String username,
+  }) {
+    return Material(
+      color: const Color(0xFFFBF9FF),
+      child: SizedBox(
+        key: const ValueKey('desktop_sidebar'),
+        width: expanded ? 240 : 80,
+        child: Column(
+          children: [
+            _buildSidebarHeader(expanded),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: _desktopNavigationItems.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 4),
+                itemBuilder: (context, index) => _buildSidebarDestination(
+                  index: index,
+                  item: _desktopNavigationItems[index],
+                  expanded: expanded,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            _buildSidebarAccountArea(
+              expanded: expanded,
+              username: username,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarDestination({
+    required int index,
+    required _SidebarNavigationItem item,
+    required bool expanded,
+  }) {
+    final selected = _index == index;
+    final destination = Material(
+      color: selected ? VicaColors.softBlue : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => setState(() => _index = index),
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 52,
+          child: Row(
+            mainAxisAlignment:
+                expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+            children: [
+              if (expanded) const SizedBox(width: 16),
+              Icon(
+                selected ? item.selectedIcon : item.icon,
+                color: selected ? VicaColors.primaryDark : VicaColors.muted,
+              ),
+              if (expanded) ...[
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color:
+                          selected ? VicaColors.primaryDark : VicaColors.text,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () => setState(() => _index = 0),
-                  icon: const Icon(Icons.home_outlined),
-                  tooltip: '대시보드',
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _index = 6),
-                  icon: const Icon(Icons.settings_outlined),
-                  tooltip: '설정',
-                ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
               ],
-            ),
-            drawer: NavigationDrawer(
-              selectedIndex: _index,
-              onDestinationSelected: (value) {
-                Navigator.of(context).pop();
-                setState(() => _index = value);
-              },
-              children: const [
-                SizedBox(height: 20),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(28, 16, 16, 10),
-                  child: Text('VICA_Supervisor'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.dashboard),
-                  label: Text('대시보드'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.add_location),
-                  label: Text('장소 저장'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.map),
-                  label: Text('지도별 장소 보기'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.my_location),
-                  label: Text('현재 위치'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.precision_manufacturing),
-                  label: Text('로봇 관리'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.notifications),
-                  label: Text('알림 및 로그'),
-                ),
-                NavigationDrawerDestination(
-                  icon: Icon(Icons.settings),
-                  label: Text('설정'),
-                ),
-              ],
-            ),
-            body: SafeArea(child: _screens[_index]),
+            ],
           ),
-          if (supervisor.emergencyOverlayVisible)
-            Positioned.fill(
-              child: _EmergencyStopOverlay(
-                settings: settings,
-                supervisor: supervisor,
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 10),
+      child: expanded
+          ? destination
+          : Tooltip(message: item.label, child: destination),
+    );
+  }
+
+  Widget _buildSidebarHeader(bool expanded) {
+    final toggleButton = IconButton(
+      onPressed: () => context.read<UiPreferencesProvider>().toggleSidebar(),
+      icon: const Icon(Icons.menu),
+      tooltip: expanded ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기',
+    );
+
+    if (expanded) {
+      return SizedBox(
+        height: 72,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'VICA',
+                  style: TextStyle(
+                    color: VicaColors.primaryDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
+              toggleButton,
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 94,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'VICA',
+            style: TextStyle(
+              color: VicaColors.primaryDark,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
             ),
+          ),
+          toggleButton,
         ],
       ),
     );
   }
+
+  Widget _buildSidebarAccountArea({
+    required bool expanded,
+    required String username,
+  }) {
+    final avatar = CircleAvatar(
+      radius: 18,
+      backgroundColor: VicaColors.softBlue,
+      child: Text(
+        _usernameInitial(username),
+        style: const TextStyle(
+          color: VicaColors.primaryDark,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+
+    if (!expanded) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Column(
+          children: [
+            Tooltip(message: '로그인 계정: $username', child: avatar),
+            const SizedBox(height: 8),
+            IconButton(
+              onPressed: _confirmLogout,
+              icon: const Icon(Icons.logout),
+              tooltip: '로그아웃',
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              avatar,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  username,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _confirmLogout,
+              icon: const Icon(Icons.logout),
+              label: const Text('로그아웃'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _usernameInitial(String username) {
+    return username.isEmpty ? '?' : username[0].toUpperCase();
+  }
+
+  Future<void> _confirmLogout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('로그아웃'),
+        content: const Text('로그아웃하면 다음 실행 시 로그인 화면이 표시됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
+    );
+    if (shouldLogout != true || !mounted) {
+      return;
+    }
+
+    await context.read<SupervisorProvider>().disconnect();
+    if (!mounted) {
+      return;
+    }
+    await context.read<AuthProvider>().logout();
+  }
+
+  static const _navigationDrawerDestinations = [
+    NavigationDrawerDestination(
+      icon: Icon(Icons.dashboard),
+      label: Text('대시보드'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.add_location),
+      label: Text('장소 저장'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.map),
+      label: Text('지도별 장소 보기'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.my_location),
+      label: Text('현재 위치'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.precision_manufacturing),
+      label: Text('로봇 관리'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.notifications),
+      label: Text('알림 및 로그'),
+    ),
+    NavigationDrawerDestination(
+      icon: Icon(Icons.settings),
+      label: Text('설정'),
+    ),
+  ];
+
+  static const _desktopNavigationItems = [
+    _SidebarNavigationItem(
+      icon: Icons.dashboard_outlined,
+      selectedIcon: Icons.dashboard,
+      label: '대시보드',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.add_location_outlined,
+      selectedIcon: Icons.add_location,
+      label: '장소 저장',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.map_outlined,
+      selectedIcon: Icons.map,
+      label: '지도별 장소 보기',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.my_location_outlined,
+      selectedIcon: Icons.my_location,
+      label: '현재 위치',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.precision_manufacturing_outlined,
+      selectedIcon: Icons.precision_manufacturing,
+      label: '로봇 관리',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.notifications_outlined,
+      selectedIcon: Icons.notifications,
+      label: '알림 및 로그',
+    ),
+    _SidebarNavigationItem(
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings,
+      label: '설정',
+    ),
+  ];
+}
+
+class _SidebarNavigationItem {
+  const _SidebarNavigationItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
 }
 
 class _EmergencyStopOverlay extends StatelessWidget {

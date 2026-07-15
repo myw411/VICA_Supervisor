@@ -34,17 +34,44 @@ class VicaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
-      children: [
-        Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        if (subtitle != null) ...[
-          const SizedBox(height: 10),
-          Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-        const SizedBox(height: 20),
-        ...children,
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth >= 900 ? 32.0 : 24.0;
+        return ListView(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            24,
+            horizontalPadding,
+            28,
+          ),
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1280),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    ...children,
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -116,24 +143,35 @@ class VicaMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return VicaCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
           _MetricIconBox(icon: icon, color: color),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              label,
-              maxLines: labelMaxLines,
-              overflow: TextOverflow.visible,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: labelFontSize,
-                    fontWeight: FontWeight.w700,
-                  ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: labelMaxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: labelFontSize,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontSize: 25,
+                      ),
+                ),
+              ],
             ),
           ),
-          Text(value, style: Theme.of(context).textTheme.headlineSmall),
         ],
       ),
     );

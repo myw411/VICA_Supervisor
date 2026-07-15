@@ -35,13 +35,10 @@ class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
         ? supervisor.selectedMap
         : _findMapById(supervisor.maps, robot.mapId);
     final locations = supervisor.locationsFor(map?.mapId);
-    final mapHeight = MediaQuery.sizeOf(context).height * 0.38;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+    return VicaPage(
+      title: '현재 위치',
       children: [
-        Text('현재 위치', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 18),
         VicaCard(
           child: DropdownButtonFormField<String>(
             initialValue: robot?.robotId,
@@ -59,22 +56,19 @@ class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
                 : (value) => setState(() => _selectedRobotId = value),
           ),
         ),
-        SizedBox(
-          height: mapHeight.clamp(260.0, 390.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: map == null
-                ? const ColoredBox(
-                    color: VicaColors.softBlue,
-                    child: Center(child: Text('현재 map_id와 일치하는 지도가 없습니다.')),
-                  )
-                : MapCanvas(
-                    map: map,
-                    settings: settings,
-                    locations: locations,
-                    robot: robot,
-                  ),
-          ),
+        ResponsiveMapFrame(
+          map: map,
+          child: map == null
+              ? const ColoredBox(
+                  color: VicaColors.softBlue,
+                  child: Center(child: Text('현재 map_id와 일치하는 지도가 없습니다.')),
+                )
+              : MapCanvas(
+                  map: map,
+                  settings: settings,
+                  locations: locations,
+                  robot: robot,
+                ),
         ),
         const SizedBox(height: 16),
         if (robot == null)
@@ -84,7 +78,8 @@ class _CurrentLocationScreenState extends State<CurrentLocationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(robot.robotName, style: Theme.of(context).textTheme.titleMedium),
+                Text(robot.robotName,
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 14),
                 _Info(label: 'x', value: robot.x.toStringAsFixed(3)),
                 _Info(label: 'y', value: robot.y.toStringAsFixed(3)),

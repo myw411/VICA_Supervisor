@@ -77,19 +77,16 @@ class MapLocationsScreen extends StatelessWidget {
         if (map == null)
           const VicaCard(child: Text('지도 목록을 먼저 불러오세요.'))
         else ...[
-          SizedBox(
-            height: 390,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: MapCanvas(
-                map: map,
-                settings: settings,
-                locations: locations,
-                selectedLocationId: supervisor.selectedLocationId,
-                robot: supervisor.primaryRobot,
-                onSelectLocation: (location) =>
-                    supervisor.selectLocation(location.locationId),
-              ),
+          ResponsiveMapFrame(
+            map: map,
+            child: MapCanvas(
+              map: map,
+              settings: settings,
+              locations: locations,
+              selectedLocationId: supervisor.selectedLocationId,
+              robot: supervisor.primaryRobot,
+              onSelectLocation: (location) =>
+                  supervisor.selectLocation(location.locationId),
             ),
           ),
           const SizedBox(height: 20),
