@@ -31,5 +31,17 @@ ros2 launch vica_mission_manager mission_manager.launch.py \
   map_yaml:=/path/to/vica_map_0630.yaml
 ```
 
+터미널 시험 도구는 선택한 지도의 정본 YAML에서 목적지 이름을 정확히 찾아 UUID로
+변환한 뒤 Mission Manager에 요청한다. 요청 수락 뒤에는 같은 목적지의
+`/vica_goal_event`를 기다리고 도착·실패·취소 결과를 출력한 뒤 종료한다. 이름에 공백이
+있으면 따옴표로 감싼다.
+
+```bash
+python3 ros2/vica_goto_goal.py vica_map_0630 "별빛관 1층 화장실"
+```
+
+기본 주행 결과 대기시간은 600초다. `--navigation-timeout 0`은 제한 없이 기다린다.
+CLI에서 `Ctrl+C`로 모니터링을 종료해도 진행 중인 Goal을 직접 취소하지 않는다.
+
 `ros2/location_storage_node.py`는 기존 JSON 저장 노드의 보호용 진입점이며 더 이상
 사용하지 않는다. 기존 JSON 장소는 새 YAML로 자동 이관하지 않는다.

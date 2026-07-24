@@ -77,5 +77,6 @@ message: 결과 사유
 Mission Manager는 현재 지도 일치, UUID 존재, `authorization == public`,
 `is_approachable == true`, pose·E-stop·Nav2 준비와 IDLE 상태를 다시 검사한다.
 
-E-stop reset은 Nav2가 실행 중이면 fresh status의 활성 Goal만 전체 취소하고, 처음부터
-미실행이면 Goal 검사를 생략한다. 이어 중앙 latch 해제와 Safety 재승인을 확인한다.
+E-stop reset은 Nav2 action status의 마지막 상태가 활성 상태이면 전체 취소 후 새
+terminal 상태를 확인한다. 마지막 상태가 terminal이거나 Goal 이력이 없으면 취소 또는
+Goal 검사를 생략한다. 이어 중앙 latch 해제와 Safety 재승인을 확인한다.

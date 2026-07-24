@@ -27,9 +27,10 @@ ros2 launch mdrobot_can_control motor_bringup.launch.py
 
 `/app_estop_reset`은 Nav2 실행 여부 확인, 필요한 경우의 활성 Goal 전체 취소, 중앙 E-stop
 latch 내부 reset, Supervisor 내부 reset, `READY_TO_GO` 확인을 하나의 절차로 수행한다.
-활성 Goal이 없거나 Nav2가 처음부터 미실행이면 cancel 서비스 호출을 생략한다. 이전
-status가 stale이면 reset을 거부한다. 앱은 내부 서비스를 직접 호출하지 않으며 터미널
-유지보수용 `/safety_reset`도 같은 절차를 사용한다.
+마지막 action status가 terminal이면 cancel 호출을 생략하고, 활성 상태이면 전체 취소 후
+요청 이후의 새 terminal 상태를 확인한다. Goal 이력이 없거나 Nav2가 미실행이면 Goal
+검사를 생략한다. 앱은 내부 서비스를 직접 호출하지 않으며 터미널 유지보수용
+`/safety_reset`도 같은 절차를 사용한다.
 
 ## 읽기 전용 확인
 
