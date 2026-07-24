@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/location_point.dart';
 import '../providers/settings_provider.dart';
 import '../providers/supervisor_provider.dart';
 import '../widgets/map_canvas.dart';
@@ -22,6 +23,10 @@ class MapLocationsScreen extends StatelessWidget {
     final supervisor = context.watch<SupervisorProvider>();
     final map = supervisor.selectedMap;
     final locations = supervisor.locationsFor(map?.mapId);
+    final selected = _selectedLocation(
+      locations,
+      supervisor.selectedLocationId,
+    );
 
     return VicaPage(
       title: '지도별 장소 보기',
@@ -129,11 +134,41 @@ class MapLocationsScreen extends StatelessWidget {
                     );
                   }).toList(),
                 ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: selected == null
+                      ? null
+                      : () async {
+                          final message = await supervisor.requestDestination(
+                            settings,
+                            selected,
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(message)),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.navigation),
+                  label: const Text('선택 목적지로 안내 요청'),
+                ),
               ],
             ),
           ),
         ],
       ],
     );
+  }
+
+  static LocationPoint? _selectedLocation(
+    List<LocationPoint> locations,
+    String? selectedId,
+  ) {
+    for (final location in locations) {
+      if (location.locationId == selectedId) {
+        return location;
+      }
+    }
+    return null;
   }
 }

@@ -323,7 +323,7 @@ class SupervisorProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 임시 저장된 목적지를 destinations 스키마의 JSON으로 전송합니다.
+  // 임시 목적지를 지도별 destinations 스키마 JSON으로 전송합니다.
   void saveDraftLocation(AppSettings settings) {
     final draft = _draftLocation;
     if (draft == null) {
@@ -339,7 +339,6 @@ class SupervisorProvider extends ChangeNotifier {
       'map_id': draft.mapId,
       ...destination,
       'pose': pose,
-      'storage_root': settings.locationStorageRoot,
       'timestamp': DateTime.now().toIso8601String(),
     };
     _client?.publishJsonString(
@@ -356,19 +355,56 @@ class SupervisorProvider extends ChangeNotifier {
     return normalized < 0 ? normalized + 360.0 : normalized;
   }
 
-  // 삭제 요청도 ROS2 저장 노드가 같은 storage_root에서 처리하도록 보냅니다.
+  // 삭제도 UUID와 map_id만 전송하며 실제 저장 경로는 ROS 파라미터가 소유합니다.
   void deleteLocation(AppSettings settings, LocationPoint location) {
     _client?.publishJsonString(
       topic: settings.deleteLocationRequestTopic,
       payload: {
         'request_id': _uuid.v4(),
         'map_id': location.mapId,
-        'location_id': location.locationId,
-        'storage_root': settings.locationStorageRoot,
+        'destination_id': location.locationId,
         'timestamp': DateTime.now().toIso8601String(),
       },
     );
     _addLog(LogFilter.coordinateTransfer, '${location.name} 장소 삭제 요청 전송');
+  }
+
+  Future<String> requestDestination(
+    AppSettings settings,
+    LocationPoint location,
+  ) async {
+    if (location.authorization != 'public') {
+      return '비공개 목적지는 주행 요청을 보낼 수 없습니다.';
+    }
+    if (!location.isApproachable) {
+      return location.unavailableReason.isEmpty
+          ? '로봇이 접근할 수 없는 목적지입니다.'
+          : location.unavailableReason;
+    }
+    final client = _client;
+    if (client == null || _connectionState != RosConnectionState.connected) {
+      return 'ROS Bridge에 연결되지 않았습니다.';
+    }
+    try {
+      final response = await client.callService(
+        service: settings.missionRequestService,
+        type: 'vica_interfaces/srv/RequestDestination',
+        args: {
+          'request_id': _uuid.v4(),
+          'map_id': location.mapId,
+          'destination_id': location.locationId,
+        },
+      );
+      final message = response.message.isEmpty
+          ? (response.accepted ? '목적지 요청을 수락했습니다.' : '목적지 요청이 거부되었습니다.')
+          : response.message;
+      _addLog(LogFilter.coordinateTransfer, message);
+      return message;
+    } catch (error) {
+      final message = 'Mission Manager 목적지 요청 실패: $error';
+      _addLog(LogFilter.coordinateTransfer, message);
+      return message;
+    }
   }
 
   void clearLogs(LogFilter filter) {

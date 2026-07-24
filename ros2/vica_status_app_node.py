@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 import rclpy
+import yaml
 from diagnostic_msgs.msg import DiagnosticArray
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterType
@@ -60,6 +61,10 @@ class VicaStatusAppNode(Node):
         # map_yaml: 수동 오버라이드. 비워두면 map_server에서 자동 감지합니다.
         self.declare_parameter("map_yaml", "")
         self.declare_parameter("location_match_radius", 0.5)
+        self.declare_parameter(
+            "destination_storage_root",
+            str(Path.home() / "vica_data" / "destinations"),
+        )
         # 위치를 매끄럽게 보여주기 위해 기본 10Hz로 발행합니다.
         self.declare_parameter("publish_period_sec", 0.1)
         self.declare_parameter("nav2_data_timeout_sec", 3.0)
@@ -72,7 +77,9 @@ class VicaStatusAppNode(Node):
         self.declare_parameter("map_server_node", "/map_server")
         self.declare_parameter("map_poll_period_sec", 2.0)
 
-        self.storage_root = Path.home() / "ros2_ws" / "location"
+        self.storage_root = Path(
+            str(self.get_parameter("destination_storage_root").value)
+        ).expanduser()
         self.map_frame = str(self.get_parameter("map_frame").value)
         self.base_frame = str(self.get_parameter("base_frame").value)
 
@@ -95,7 +102,7 @@ class VicaStatusAppNode(Node):
         self.detected_map_yaml = ""
         self._map_param_in_flight = False
 
-        # locations.json 캐시 (10Hz 발행마다 파일을 읽지 않도록).
+        # destinations.yaml 캐시 (10Hz 발행마다 파일을 읽지 않도록).
         self._loc_cache: list[dict[str, Any]] = []
         self._loc_cache_map_id = ""
         self._loc_cache_time = 0.0
@@ -414,20 +421,21 @@ class VicaStatusAppNode(Node):
 
         for location in locations:
             try:
-                dx = x - float(location.get("x", 0.0))
-                dy = y - float(location.get("y", 0.0))
+                pose = location.get("pose") or {}
+                dx = x - float(pose.get("x", 0.0))
+                dy = y - float(pose.get("y", 0.0))
             except (TypeError, ValueError):
                 continue
             distance = math.hypot(dx, dy)
             if distance <= nearest_distance:
                 nearest_distance = distance
                 nearest_name = str(
-                    location.get("name") or location.get("location_id") or ""
+                    location.get("name") or location.get("id") or ""
                 )
         return nearest_name or "현재 위치 확인 중"
 
     def _read_locations(self, map_id: str) -> list[dict[str, Any]]:
-        """~/ros2_ws/location/<map_id>/locations.json을 읽습니다(2초 캐시).
+        """지도별 destinations.yaml을 읽습니다(2초 캐시).
 
         발행 주기가 높으므로(10Hz) 매번 파일을 읽지 않도록 map_id별로 잠시 캐시합니다.
         파일이 없거나 깨져도 상태 발행은 계속되어야 하므로 예외 시 빈 목록을 씁니다.
@@ -440,14 +448,17 @@ class VicaStatusAppNode(Node):
             return self._loc_cache
 
         result: list[dict[str, Any]] = []
-        path = self.storage_root / map_id / "locations.json"
+        path = self.storage_root / map_id / "destinations.yaml"
         if map_id and path.exists():
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    result = [item for item in data if isinstance(item, dict)]
-            except (json.JSONDecodeError, OSError) as exc:
-                self.get_logger().warn(f"failed to read locations: {exc}")
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                destinations = data.get("destinations", [])
+                if isinstance(destinations, list):
+                    result = [
+                        item for item in destinations if isinstance(item, dict)
+                    ]
+            except (yaml.YAMLError, OSError) as exc:
+                self.get_logger().warn(f"failed to read destinations: {exc}")
 
         self._loc_cache = result
         self._loc_cache_map_id = map_id

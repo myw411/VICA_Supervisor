@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""~/ros2_ws/maps의 지도 목록을 VICA_Supervisor 앱에 제공하는 ROS2 노드입니다.
+"""현재 VICA ROS 작업공간의 지도 목록을 Supervisor 앱에 제공하는 노드입니다.
 
 연결 흐름:
     Flutter 앱
         -> /map_list_request
         -> MapListNode
-        -> ~/ros2_ws/maps/*.png 및 같은 이름의 *.yaml 조회
+        -> vica_ros2_ws/maps/*.png 및 같은 이름의 *.yaml 조회
         -> /map_list
         -> Flutter 앱
 
@@ -24,7 +24,7 @@ from std_msgs.msg import String
 
 
 class MapListNode(Node):
-    """지도 목록 요청을 받으면 ~/ros2_ws/maps/*.png를 /map_list로 publish합니다.
+    """지도 목록 요청을 받으면 maps_root의 PNG를 /map_list로 publish합니다.
 
     구독 topic:
         /map_list_request: 앱의 지도 목록 동기화 요청
@@ -36,8 +36,12 @@ class MapListNode(Node):
     def __init__(self) -> None:
         super().__init__("vica_supervisor_map_list")
 
-        # 앱에서 보여줄 지도 PNG와 Nav2 map yaml이 놓이는 기본 폴더입니다.
-        self.maps_root = Path.home() / "ros2_ws" / "maps"
+        workspace_root = Path(__file__).resolve().parents[2]
+        default_maps_root = workspace_root / "vica_ros2_ws" / "maps"
+        self.declare_parameter("maps_root", str(default_maps_root))
+        self.maps_root = Path(
+            str(self.get_parameter("maps_root").value)
+        ).expanduser()
 
         # 앱이 시작되거나 동기화 버튼을 누르면 이 topic으로 빈 JSON/String 요청을 보냅니다.
         self.create_subscription(String, "/map_list_request", self.publish_maps, 10)
@@ -49,7 +53,7 @@ class MapListNode(Node):
         """PNG 지도와 같은 이름의 YAML 메타데이터를 읽어 map list JSON을 구성합니다.
 
         처리:
-            1. ~/ros2_ws/maps/*.png를 정렬해 순회합니다.
+            1. maps_root의 PNG를 정렬해 순회합니다.
             2. 같은 stem의 .yaml에서 resolution/origin을 읽습니다.
             3. PNG 헤더에서 width/height를 읽습니다.
             4. 앱이 이해하는 JSON 목록으로 묶어 /map_list에 publish합니다.

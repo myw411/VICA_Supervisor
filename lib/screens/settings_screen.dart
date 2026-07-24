@@ -60,7 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 12),
               _Field(controller: _c('mapHttpBaseUrl'), label: '지도 이미지 URL'),
               _Field(controller: _c('rosBridgeUrl'), label: 'ROS Bridge 주소'),
-              _Field(controller: _c('locationStorageRoot'), label: '좌표 저장 루트'),
             ],
           ),
         ),
@@ -102,6 +101,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Field(
                   controller: _c('deleteLocationRequestTopic'),
                   label: '장소 삭제 요청 topic'),
+              _Field(
+                controller: _c('missionRequestService'),
+                label: '목적지 주행 요청 service',
+              ),
               _Field(controller: _c('robotStatusTopic'), label: '로봇 상태 topic'),
               _Field(
                 controller: _c('emergencyActivateService'),
@@ -155,13 +158,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final values = {
       'rosBridgeUrl': settings.rosBridgeUrl,
       'mapHttpBaseUrl': settings.mapHttpBaseUrl,
-      'locationStorageRoot': settings.locationStorageRoot,
       'mapListRequestTopic': settings.mapListRequestTopic,
       'mapListTopic': settings.mapListTopic,
       'locationListRequestTopic': settings.locationListRequestTopic,
       'locationListTopic': settings.locationListTopic,
       'saveLocationTopic': settings.saveLocationTopic,
       'deleteLocationRequestTopic': settings.deleteLocationRequestTopic,
+      'missionRequestService': settings.missionRequestService,
       'robotStatusTopic': settings.robotStatusTopic,
       'emergencyActivateService': settings.emergencyActivateService,
       'emergencyResetService': settings.emergencyResetService,
@@ -189,13 +192,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final next = _settings.copyWith(
       rosBridgeUrl: _c('rosBridgeUrl').text.trim(),
       mapHttpBaseUrl: _c('mapHttpBaseUrl').text.trim(),
-      locationStorageRoot: _c('locationStorageRoot').text.trim(),
       mapListRequestTopic: _c('mapListRequestTopic').text.trim(),
       mapListTopic: _c('mapListTopic').text.trim(),
       locationListRequestTopic: _c('locationListRequestTopic').text.trim(),
       locationListTopic: _c('locationListTopic').text.trim(),
       saveLocationTopic: _c('saveLocationTopic').text.trim(),
       deleteLocationRequestTopic: _c('deleteLocationRequestTopic').text.trim(),
+      missionRequestService: _c('missionRequestService').text.trim(),
       robotStatusTopic: _c('robotStatusTopic').text.trim(),
       emergencyActivateService: _c('emergencyActivateService').text.trim(),
       emergencyResetService: _c('emergencyResetService').text.trim(),

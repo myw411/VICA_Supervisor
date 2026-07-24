@@ -449,7 +449,7 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
                                         false)) {
                                       return;
                                     }
-                                    _saveDraft(supervisor, mapId, locations);
+                                    _saveDraft(supervisor, mapId);
                                     Navigator.of(sheetContext).pop();
                                   },
                             icon: const Icon(Icons.add_location_alt),
@@ -517,24 +517,22 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
   void _saveDraft(
     SupervisorProvider supervisor,
     String mapId,
-    List<LocationPoint> locations,
   ) {
     final picked = _pickedRos;
     if (picked == null || _category1 == null || _category2 == null) {
       return;
     }
     final name = _nameController.text.trim();
-    final floor = int.parse(_floorController.text.trim());
     supervisor.setDraftLocation(
       LocationPoint(
-        locationId: _createDestinationId(mapId, floor, locations),
+        locationId: _uuid.v4(),
         mapId: mapId,
         name: name,
         aliases: _parseAliases(name),
         category1: _category1!,
         category2: _category2!,
         building: _buildingController.text.trim(),
-        floor: floor,
+        floor: int.parse(_floorController.text.trim()),
         owner: _category1 == 'person' ? _ownerController.text.trim() : '',
         authorization: _authorization,
         isApproachable: _isApproachable,
@@ -543,7 +541,7 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
         x: picked.dx,
         y: picked.dy,
         yaw: _yawFromDirection(_yawDirection),
-        confirmPrompt: '$name로 안내해드릴까요?',
+        confirmPrompt: '$name으로 안내해드릴까요?',
         arrivalMessage: '$name 앞에 도착했습니다.',
       ),
     );
@@ -558,34 +556,6 @@ class _SaveLocationScreenState extends State<SaveLocationScreen> {
           .where((alias) => alias.isNotEmpty),
     );
     return aliases.toList(growable: false);
-  }
-
-  String _createDestinationId(
-    String mapId,
-    int floor,
-    List<LocationPoint> locations,
-  ) {
-    final building = _slug(
-      _buildingController.text.trim().replaceFirst(RegExp(r'_building$'), ''),
-    );
-    final map = _slug(mapId);
-    final floorPart = floor < 0 ? 'b${floor.abs()}' : '${floor}f';
-    final base = [
-      building.isEmpty ? map : building,
-      floorPart,
-      _slug(_category2!),
-    ].where((part) => part.isNotEmpty).join('_');
-    if (!locations.any((location) => location.locationId == base)) {
-      return base;
-    }
-    return '${base}_${_uuid.v4().substring(0, 8)}';
-  }
-
-  String _slug(String value) {
-    return value
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
   }
 
   void _resetLocationInput() {

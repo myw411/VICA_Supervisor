@@ -12,7 +12,8 @@ enum RosConnectionState {
 }
 
 typedef RosTopicHandler = void Function(Map<String, Object?> message);
-typedef RosStateHandler = void Function(RosConnectionState state, String detail);
+typedef RosStateHandler = void Function(
+    RosConnectionState state, String detail);
 
 // rosbridge call_service 응답. result=false 이면 서비스 호출 자체가 실패한 것이고,
 // values 에는 서비스가 돌려준 필드(std_srvs/Trigger 라면 success, message)가 담긴다.
@@ -23,6 +24,7 @@ class RosServiceResponse {
   final Map<String, Object?> values;
 
   bool get success => values['success'] == true;
+  bool get accepted => values['accepted'] == true;
   String get message => values['message'] as String? ?? '';
 }
 

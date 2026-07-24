@@ -11,13 +11,13 @@ class AppSettings {
     // Android 기기처럼 Jetson 밖에서 접속하는 실행 환경은 Jetson host IP를 사용합니다.
     // this.rosBridgeUrl = 'ws://192.168.0.10:9090',
     // this.mapHttpBaseUrl = 'http://192.168.0.10:8000',
-    this.locationStorageRoot = '~/ros2_ws/location',
     this.mapListRequestTopic = '/map_list_request',
     this.mapListTopic = '/map_list',
     this.locationListRequestTopic = '/location_list_request',
     this.locationListTopic = '/location_list',
     this.saveLocationTopic = '/save_location',
     this.deleteLocationRequestTopic = '/delete_location_request',
+    this.missionRequestService = '/vica/mission/request_destination',
     this.robotStatusTopic = '/robot_status',
     this.emergencyActivateService = '/app_estop_activate',
     this.emergencyResetService = '/app_estop_reset',
@@ -37,13 +37,13 @@ class AppSettings {
 
   final String rosBridgeUrl;
   final String mapHttpBaseUrl;
-  final String locationStorageRoot;
   final String mapListRequestTopic;
   final String mapListTopic;
   final String locationListRequestTopic;
   final String locationListTopic;
   final String saveLocationTopic;
   final String deleteLocationRequestTopic;
+  final String missionRequestService;
   final String robotStatusTopic;
   final String emergencyActivateService;
   final String emergencyResetService;
@@ -63,13 +63,13 @@ class AppSettings {
   AppSettings copyWith({
     String? rosBridgeUrl,
     String? mapHttpBaseUrl,
-    String? locationStorageRoot,
     String? mapListRequestTopic,
     String? mapListTopic,
     String? locationListRequestTopic,
     String? locationListTopic,
     String? saveLocationTopic,
     String? deleteLocationRequestTopic,
+    String? missionRequestService,
     String? robotStatusTopic,
     String? emergencyActivateService,
     String? emergencyResetService,
@@ -89,7 +89,6 @@ class AppSettings {
     return AppSettings(
       rosBridgeUrl: rosBridgeUrl ?? this.rosBridgeUrl,
       mapHttpBaseUrl: mapHttpBaseUrl ?? this.mapHttpBaseUrl,
-      locationStorageRoot: locationStorageRoot ?? this.locationStorageRoot,
       mapListRequestTopic: mapListRequestTopic ?? this.mapListRequestTopic,
       mapListTopic: mapListTopic ?? this.mapListTopic,
       locationListRequestTopic:
@@ -98,6 +97,8 @@ class AppSettings {
       saveLocationTopic: saveLocationTopic ?? this.saveLocationTopic,
       deleteLocationRequestTopic:
           deleteLocationRequestTopic ?? this.deleteLocationRequestTopic,
+      missionRequestService:
+          missionRequestService ?? this.missionRequestService,
       robotStatusTopic: robotStatusTopic ?? this.robotStatusTopic,
       emergencyActivateService:
           emergencyActivateService ?? this.emergencyActivateService,
@@ -125,13 +126,13 @@ class AppSettings {
     return {
       'rosBridgeUrl': rosBridgeUrl,
       'mapHttpBaseUrl': mapHttpBaseUrl,
-      'locationStorageRoot': locationStorageRoot,
       'mapListRequestTopic': mapListRequestTopic,
       'mapListTopic': mapListTopic,
       'locationListRequestTopic': locationListRequestTopic,
       'locationListTopic': locationListTopic,
       'saveLocationTopic': saveLocationTopic,
       'deleteLocationRequestTopic': deleteLocationRequestTopic,
+      'missionRequestService': missionRequestService,
       'robotStatusTopic': robotStatusTopic,
       'emergencyActivateService': emergencyActivateService,
       'emergencyResetService': emergencyResetService,
@@ -156,8 +157,6 @@ class AppSettings {
       rosBridgeUrl: json['rosBridgeUrl'] as String? ?? defaults.rosBridgeUrl,
       mapHttpBaseUrl:
           json['mapHttpBaseUrl'] as String? ?? defaults.mapHttpBaseUrl,
-      locationStorageRoot: json['locationStorageRoot'] as String? ??
-          defaults.locationStorageRoot,
       mapListRequestTopic: json['mapListRequestTopic'] as String? ??
           defaults.mapListRequestTopic,
       mapListTopic: json['mapListTopic'] as String? ?? defaults.mapListTopic,
@@ -170,6 +169,8 @@ class AppSettings {
       deleteLocationRequestTopic:
           json['deleteLocationRequestTopic'] as String? ??
               defaults.deleteLocationRequestTopic,
+      missionRequestService: json['missionRequestService'] as String? ??
+          defaults.missionRequestService,
       robotStatusTopic:
           json['robotStatusTopic'] as String? ?? defaults.robotStatusTopic,
       emergencyActivateService: json['emergencyActivateService'] as String? ??
