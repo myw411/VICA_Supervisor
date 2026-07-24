@@ -1,0 +1,24 @@
+# destination_storage_node가 지도별 destinations.yaml을 생성할 때 사용할 스키마 예시입니다.
+destinations:
+  - id: "starlight_1f_restroom"
+    name: "별빛관 1층 화장실"
+    aliases:
+      - "별빛관 1층 화장실"
+      - "별빛관 화장실"
+      - "1층 화장실"
+      - "화장실"
+    category1: "facility"
+    category2: "restroom"
+    building: "starlight_building"
+    floor: 1
+    owner: ""
+    authorization: "public"
+    is_approachable: true
+    unavailable_reason: ""
+    pose:
+      frame_id: "map"
+      x: 0.0
+      y: 0.0
+      yaw: 0.0
+    confirm_prompt: "별빛관 1층 화장실로 안내해드릴까요?"
+    arrival_message: "별빛관 1층 화장실 앞에 도착했습니다."

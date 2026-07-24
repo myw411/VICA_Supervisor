@@ -159,8 +159,7 @@ class SupervisorProvider extends ChangeNotifier {
       return;
     }
     final client = _client;
-    if (client == null ||
-        _connectionState != RosConnectionState.connected) {
+    if (client == null || _connectionState != RosConnectionState.connected) {
       _setEmergencyStopState(
         EmergencyStopState.activationFailed,
         'ROS Bridge에 연결되지 않아 비상정지를 활성화하지 못했습니다.',
@@ -229,8 +228,7 @@ class SupervisorProvider extends ChangeNotifier {
       return;
     }
     final client = _client;
-    if (client == null ||
-        _connectionState != RosConnectionState.connected) {
+    if (client == null || _connectionState != RosConnectionState.connected) {
       _setEmergencyStopState(
         EmergencyStopState.releaseFailed,
         'ROS Bridge에 연결되지 않아 비상정지를 해제하지 못했습니다.',
@@ -325,16 +323,22 @@ class SupervisorProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 임시 저장된 좌표를 ROS2 저장 topic으로 전송합니다.
+  // 임시 저장된 목적지를 destinations 스키마의 JSON으로 전송합니다.
   void saveDraftLocation(AppSettings settings) {
     final draft = _draftLocation;
     if (draft == null) {
       return;
     }
+    final destination = draft.toJson();
+    final pose = Map<String, Object>.from(
+      destination['pose']! as Map<String, Object>,
+    );
+    pose['yaw'] = _normalizeYawDegrees(draft.yaw);
     final payload = {
       'request_id': _uuid.v4(),
-      ...draft.toJson(),
-      'yaw': _normalizeYawDegrees(draft.yaw),
+      'map_id': draft.mapId,
+      ...destination,
+      'pose': pose,
       'storage_root': settings.locationStorageRoot,
       'timestamp': DateTime.now().toIso8601String(),
     };

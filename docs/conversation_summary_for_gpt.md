@@ -986,3 +986,241 @@ main
 - 앱에서 주행 목적지 요청까지 직접 다룰지 여부 결정
 - 지도 PNG와 Nav2 PGM/YAML 좌표계가 항상 일치하도록 관리 도구화
 
+---
+
+## 23. 이 문서 작성 이후 변경된 전체 구조
+
+기존 1~22절 작성 이후 앱은 다음 방향으로 확장되었다.
+
+```text
+Flutter 관리자 앱
+  ├─ 로그인 및 반응형 화면
+  ├─ 지도/목적지 관리
+  ├─ /robot_status 구독
+  └─ 비상정지 서비스 호출 및 전역 차단 화면
+          ↓ rosbridge
+VICA ROS2
+  ├─ map_list_node
+  ├─ location_storage_node (현재는 기존 JSON 방식)
+  ├─ vica_status_app_node
+  ├─ vica_goto_goal
+  └─ app_emergency_node (실제 VICA ROS2 작업공간에서 관리)
+```
+
+앱은 계속 Nav2 action이나 TF를 직접 다루지 않고, 앱 전용 ROS2 노드가 가공한
+JSON 상태와 제한된 서비스만 사용한다.
+
+---
+
+## 24. 비상정지 흐름 추가
+
+앱 모든 화면에서 사용할 수 있는 전역 비상정지 버튼과 차단 화면이 추가되었다.
+비상정지 활성화 중에는 다른 앱 조작을 막고, 실패 시 재시도 또는 실패 알림 닫기를
+제공한다.
+
+현재 앱 설정 기준 연결은 다음과 같다.
+
+```text
+앱
+  ├─ /app_estop_activate 서비스 호출
+  ├─ /app_estop_reset 서비스 호출
+  └─ /app_estop_state 구독
+          ↓
+app_emergency_node
+  ├─ 기존 Nav2 목적지 취소
+  ├─ /app_emergency_stop 발행
+  └─ /estop_reset 호출
+```
+
+`vica_goto_goal`은 `/emergency_stop`, `/app_emergency_stop`을 구독하여 도착 후
+yaw 정렬 중에도 즉시 멈출 수 있게 변경되었다. 목적지가 취소되면
+`/vica_goal_event`에 `goal_canceled`를 발행하고, `vica_status_app_node`는 이를 받아
+현재 목적지와 주행 중 상태를 해제한다. 비상정지 해제 후에는 이전 목적지를 자동으로
+다시 시작하지 않으며, 새로운 주행 명령을 받아야 한다.
+
+주의할 점:
+
+- `app_emergency_node.py`는 한때 이 저장소에 추가되었지만 현재는 제거되어 있다.
+  실제 운용 코드는 VICA의 ROS2 작업공간에서 별도로 배포하고 관리해야 한다.
+- `docs/ros2_topic_contract.md` 일부에는 이전 `/safety/emergency_stop_request`,
+  `/safety/emergency_stop_state` 방식이 남아 있다. 현재 앱 코드는 위의 service와
+  `/app_estop_state`를 사용하므로 배포 전 계약 문서를 다시 맞춰야 한다.
+- 소프트웨어 비상정지는 물리 비상정지 회로를 대신하지 않는다.
+- 실제 장비 시험은 바퀴를 띄우거나 모터 전원을 분리한 상태에서 먼저 진행한다.
+
+---
+
+## 25. vica_status_app_node 및 주행 상태 개선
+
+`vica_status_app_node`는 앱이 여러 ROS2 topic을 직접 구독하지 않도록 상태를
+`/robot_status` 하나로 요약하는 역할을 유지한다. 이후 다음 내용이 보강되었다.
+
+- 위치는 TF `map -> base_footprint`를 우선 사용하여 앱의 로봇 마커를 부드럽게 표시
+- `/odom`은 주로 실제 이동 속도 판단과 TF 미확보 시 보조 정보로 사용
+- `/diagnostics`로 오류 및 대기 사유 구성
+- `/vica_goal_event`로 현재 목적지와 navigation 활성 상태 관리
+- `map_server`의 `yaml_filename` 파라미터에서 현재 `map_id` 자동 감지
+- Nav2가 일시적으로 준비되지 않은 상태와 다시 사용 가능해진 상태를 앱 로그에 반영
+
+현재 주요 흐름:
+
+```text
+TF + /odom + /diagnostics + /vica_goal_event
+  → vica_status_app_node
+  → /robot_status JSON
+  → Flutter SupervisorProvider
+  → 대시보드, 현재 위치, 로봇 관리, 로그 화면
+```
+
+`vica_goto_goal`에는 목적지 도착 후 yaw 오차를 줄이기 위한 저속 정렬 로직도
+추가되었다. 정렬 속도, 허용 오차, 최대 시간은 ROS2 파라미터로 조절할 수 있다.
+
+---
+
+## 26. 로그인 및 반응형 앱 구조
+
+앱 시작 시 `AuthGate`가 로그인 상태를 확인한 뒤 로그인 화면 또는 관리자 화면을
+표시하도록 변경되었다.
+
+- 현재 로그인은 시연용 로컬 계정 방식
+- 로그인 상태는 `SharedPreferences`에 저장되어 앱 재실행 후에도 유지
+- 넓은 화면은 접고 펼칠 수 있는 데스크톱 사이드바 사용
+- 좁은 화면은 모바일 Drawer 사용
+- 사이드바 접힘 상태도 로컬에 저장
+- 지도 화면은 `ResponsiveMapFrame`으로 감싸 화면 크기가 달라도 기존 좌표 변환을 유지
+
+주의할 점:
+
+- 현재 로그인은 서버 인증이나 암호화된 운영용 인증이 아니다.
+- 실제 관리자 계정 체계가 필요하면 백엔드 인증과 권한 검증을 별도로 추가해야 한다.
+- 반응형 UI를 수정할 때 지도 좌표 계산 로직보다 표시 크기와 레이아웃을 우선 조정한다.
+
+---
+
+## 27. 목적지 스키마 및 저장 UI 변경 작업
+
+기존 `locations.json`보다 LLM 검색과 앱 관리에 적합한 목적지 정보를 사용하기 위해
+`destinations.yaml` 스키마와 입력 UI가 먼저 설계되었다.
+
+예정 저장 경로:
+
+```text
+~/vica_data/destinations/<map_id>/destinations.yaml
+```
+
+주요 목적지 필드:
+
+```text
+id, name, aliases
+category1, category2
+building, floor, owner
+authorization, is_approachable, unavailable_reason
+pose.frame_id, pose.x, pose.y, pose.yaw
+confirm_prompt, arrival_message
+```
+
+앱 저장 화면은 OmniClass Table 13의 공식 코드를 적용한 것이 아니라, 공간을 기능별로
+계층 분류하는 방식만 차용했다. 상위 카테고리를 선택하면 해당 세부 카테고리 목록이
+나오며, 접근 권한과 로봇 접근 가능 여부도 드롭다운으로 선택한다.
+
+앱이 자동으로 만드는 값:
+
+- 목적지 `id`
+- 지도에서 선택한 `x`, `y`
+- 기존 방향 선택을 변환한 `yaw`
+- `pose.frame_id: map`
+- 확인 문구와 도착 문구
+
+현재 관련 파일:
+
+```text
+docs/destinations_schema.yaml
+lib/core/destination_categories.dart
+lib/models/location_point.dart
+lib/screens/save_location_screen.dart
+lib/providers/supervisor_provider.dart
+```
+
+중요한 현재 상태:
+
+- UI와 앱의 JSON payload 스키마까지만 변경되었다.
+- `destination_storage_node`는 아직 생성되지 않았다.
+- 기존 `ros2/location_storage_node.py`는 `location_id`, 평면 `x/y/yaw`와
+  `locations.json`을 기대하므로 새 payload와 호환되지 않는다.
+- 기존 `vica_goto_goal.py`와 `vica_status_app_node.py`도 아직
+  `~/ros2_ws/location/<map_id>/locations.json`을 읽는다.
+- 따라서 새 저장 노드와 조회 경로를 연결하기 전에는 새 UI에서 보낸 목적지가 실제
+  YAML 파일에 저장되거나 기존 주행 노드에서 검색되지 않는다.
+
+---
+
+## 28. destination_storage_node 생성 후 연결 예정 흐름
+
+새 노드의 이름은 추후 변경될 수 있지만 역할은 다음과 같이 두는 것이 권장된다.
+
+```text
+앱 /save_location JSON
+  → destination_storage_node
+  → map_id에 맞는 destinations.yaml 저장
+
+앱 /location_list_request
+  → destination_storage_node가 YAML 조회
+  → /location_list JSON 발행
+  → 앱 목적지 목록 갱신
+```
+
+파일 내부 루트 키는 `destinations`를 사용하되, 앱으로 돌려주는 transport JSON은
+현재 앱 호환을 위해 다음 구조를 유지할 수 있다.
+
+```json
+{
+  "map_id": "vica_map_0529",
+  "locations": []
+}
+```
+
+노드를 연결할 때 함께 변경해야 하는 부분:
+
+1. 저장 루트를 `~/vica_data/destinations`로 통일
+2. `location_storage_node` 실행을 새 저장 노드로 교체
+3. `vica_goto_goal`과 `vica_status_app_node`의 목적지 조회를 같은 YAML 저장소로 변경
+4. 삭제 요청의 `location_id`를 YAML 목적지의 `id`와 대응
+5. YAML 쓰기는 임시 파일 저장 후 교체하는 방식으로 처리
+6. 앱에서 받은 임의 경로보다 ROS2 node parameter로 실제 저장 루트를 관리
+
+향후 앱 주행 명령은 앱이 Nav2로 직접 보내지 않고 다음 구조로 연결할 예정이다.
+
+```text
+앱에서 목적지 선택
+  → /navigation_request
+  → vica_mission_manager
+  → destinations.yaml에서 목적지 확인
+  → vica_goto_goal 또는 Nav2 실행 계층
+  → /vica_goal_event
+  → vica_status_app_node
+  → /robot_status
+  → 앱 주행 상태 표시
+```
+
+이 `/navigation_request` 앱 발행 기능, `vica_mission_manager` 연동,
+`destination_storage_node`는 아직 현재 저장소에 구현되지 않았다. LLM도 같은
+`destinations.yaml`을 목적지 기준 DB로 사용하도록 하되, 앱의 관리자 주행 요청 흐름은
+LLM과 직접 결합하지 않는 방향이다.
+
+---
+
+## 29. 현재 기준 주요 인터페이스
+
+| 구분 | 인터페이스 | 현재 상태 |
+| --- | --- | --- |
+| 지도 목록 | `/map_list_request`, `/map_list` | 사용 중 |
+| 목적지 목록/저장 | `/location_list_request`, `/location_list`, `/save_location`, `/delete_location_request` | 사용 중이나 저장 스키마 전환 중 |
+| 앱 상태 | `/robot_status` | 사용 중 |
+| 비상정지 | `/app_estop_activate`, `/app_estop_reset` service, `/app_estop_state` topic | 현재 앱 설정 |
+| 주행 이벤트 | `/vica_destination_request`, `/vica_goal_event` | ROS2 내부에서 사용 중 |
+| 실제 주행 | `/navigate_to_pose` action | `vica_goto_goal`에서 사용 |
+| 앱 목적지 주행 요청 | `/navigation_request` | 향후 구현 예정 |
+
+다른 컴퓨터나 다른 저장소에서 후속 구현을 시작할 때는 기존 19절의 목록보다 이 절과
+현재 `lib/core/app_settings.dart`를 우선 확인해야 한다.
+
